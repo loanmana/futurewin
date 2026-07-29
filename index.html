@@ -314,7 +314,7 @@ function delDoc(cid,did){
   c.docs=(c.docs||[]).filter(x=>x.id!==did);
   save();viewCIF(cid);
 }
-/* ======== PART 1 END - PART 2 MEKATA YATIN PASTE KARANNA ======== */
+
 /* ============ GROUPS ============ */
 function pgGroups(){
   return `<div class="card"><h3 class="sec">Create Group</h3>
@@ -338,41 +338,71 @@ function delGroup(id){
 }
 
 /* ============ CUSTOMERS ============ */
+let editCid=null;
+
 function pgCustomers(){
-  return `<div class="card"><h3 class="sec">Create Customer (Next No: <b>${nextCustNo()}</b>)</h3><div class="grid g4">
-    <div><label>Group</label><select id="cGroup"><option value="">-- None --</option>${groups.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('')}</select></div>
-    <div><label>Title</label><select id="cTitle"><option>Mr</option><option>Mrs</option><option>Miss</option><option>Rev</option><option>Dr</option></select></div>
-    <div><label>Full Name *</label><input id="cFull"></div>
-    <div><label>Other Names</label><input id="cOther"></div>
-    <div><label>NIC *</label><input id="cNic" oninput="nicCheck()"><div id="nicWarn" style="color:var(--bad);font-size:12px;margin-top:-6px;margin-bottom:8px"></div></div>
-    <div><label>Phone No *</label><input id="cPhone"></div>
-    <div><label>Email</label><input id="cEmail" type="email"></div>
-    <div><label>Location (Google Map link)</label><input id="cMap" placeholder="https://maps.google.com/..."></div>
-    <div><label>Address</label><input id="cAddr"></div>
-    <div><label>Date of Birth</label><input id="cDob" type="date"></div>
-    <div><label>Gender</label><select id="cGender"><option>Male</option><option>Female</option></select></div>
-    <div><label>Marital Status</label><select id="cMar"><option>Single</option><option>Married</option><option>Divorced</option><option>Widowed</option></select></div>
-    </div><button class="btn green" onclick="addCustomer()">+ Save Customer</button></div>
+  const ec=editCid?customers.find(x=>x.id===editCid):null;
+  return `<div class="card"><h3 class="sec">${ec?'✏️ EDIT Customer: '+esc(ec.no)+' - '+esc(ec.full):'Create Customer (Next No: <b>'+nextCustNo()+'</b>)'}</h3><div class="grid g4">
+    <div><label>Group</label><select id="cGroup"><option value="">-- None --</option>${groups.map(g=>`<option value="${g.id}" ${ec&&ec.group===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}</select></div>
+    <div><label>Title</label><select id="cTitle">${['Mr','Mrs','Miss','Rev','Dr'].map(t=>`<option ${ec&&ec.title===t?'selected':''}>${t}</option>`).join('')}</select></div>
+    <div><label>Full Name *</label><input id="cFull" value="${ec?esc(ec.full):''}"></div>
+    <div><label>Other Names</label><input id="cOther" value="${ec?esc(ec.other||''):''}"></div>
+    <div><label>NIC *</label><input id="cNic" value="${ec?esc(ec.nic):''}" oninput="nicCheck()"><div id="nicWarn" style="color:var(--bad);font-size:12px;margin-top:-6px;margin-bottom:8px"></div></div>
+    <div><label>Phone No *</label><input id="cPhone" value="${ec?esc(ec.phone):''}"></div>
+    <div><label>Email</label><input id="cEmail" type="email" value="${ec?esc(ec.email||''):''}"></div>
+    <div><label>Location (Google Map link)</label><input id="cMap" value="${ec?esc(ec.map||''):''}" placeholder="https://maps.google.com/..."></div>
+    <div><label>Address</label><input id="cAddr" value="${ec?esc(ec.addr||''):''}"></div>
+    <div><label>Date of Birth</label><input id="cDob" type="date" value="${ec?esc(ec.dob||''):''}"></div>
+    <div><label>Gender</label><select id="cGender">${['Male','Female'].map(g=>`<option ${ec&&ec.gender===g?'selected':''}>${g}</option>`).join('')}</select></div>
+    <div><label>Marital Status</label><select id="cMar">${['Single','Married','Divorced','Widowed'].map(m=>`<option ${ec&&ec.marital===m?'selected':''}>${m}</option>`).join('')}</select></div>
+    </div>
+    <button class="btn green" onclick="addCustomer()">${ec?'✏️ Update Customer':'+ Save Customer'}</button>
+    ${ec?`<button class="btn gray" style="margin-left:8px" onclick="editCid=null;nav('customers',navBtn('Customers'))">Cancel Edit</button>`:''}
+  </div>
   <div class="card"><div class="secrow"><h3>Customers (${customers.length})</h3>${xlsBtn('tblCust','customers')}</div>
-  <table id="tblCust"><tr><th>Cust No</th><th>Name</th><th>NIC</th><th>Phone</th><th>Group</th><th>Joined</th><th>Map</th><th>Loans</th><th></th></tr>
+  <table id="tblCust"><tr><th>Cust No</th><th>Name</th><th>NIC</th><th>Phone</th><th>Group</th><th>Joined</th><th>Map</th><th>Loans</th><th>Actions</th></tr>
   ${customers.map(c=>{const g=groups.find(x=>x.id===c.group);const ln=loans.filter(l=>l.customerId===c.id&&l.status!=='settled').length;
-   return `<tr><td><b>${esc(c.no)}</b></td><td><b>${esc(c.title)}. ${esc(c.full)}</b><br><small>${esc(c.email)}</small></td><td>${esc(c.nic)}</td><td>${esc(c.phone)}</td>
+   return `<tr><td><b>${esc(c.no)}</b></td><td><b>${esc(c.title)}. ${esc(c.full)}</b><br><small>${esc(c.email||'')}</small></td><td>${esc(c.nic)}</td><td>${esc(c.phone)}</td>
    <td>${g?esc(g.name):'-'}</td><td>${esc(c.joined)}</td><td>${c.map?`<a href="${esc(c.map)}" target="_blank">📍 Map</a>`:'-'}</td>
    <td>${ln?`<span class="badge b-active">${ln} active</span>`:'<span class="badge b-settled">clear</span>'}</td>
-   <td>${isAdmin()?`<button class="btn red sm" onclick="delCustomer('${c.id}')">🗑️ Delete</button>`:''}</td></tr>`}).join('')||'<tr><td colspan=9>No customers</td></tr>'}</table></div>`;
+   <td>
+     <button class="btn sm orange" onclick="editCustomer('${c.id}')">✏️ Edit</button>
+     ${isAdmin()?`<button class="btn red sm" onclick="delCustomer('${c.id}')">🗑️ Delete</button>`:''}
+   </td></tr>`}).join('')||'<tr><td colspan=9>No customers</td></tr>'}</table></div>`;
 }
+
+function editCustomer(id){
+  editCid=id;
+  nav('customers',navBtn('Customers'));
+}
+
 function nicCheck(){
-  const dup=customers.find(c=>normNic(c.nic)===normNic(cNic.value)&&cNic.value.trim());
+  const dup=customers.find(c=>normNic(c.nic)===normNic(cNic.value)&&c.id!==editCid&&cNic.value.trim());
   nicWarn.textContent=dup?'⚠️ NIC already registered to: '+dup.full+' ('+dup.no+')':'';
 }
+
 function addCustomer(){
   if(!cFull.value.trim()||!cNic.value.trim()||!cPhone.value.trim())return alert('Full name, NIC & Phone are required');
-  const dup=customers.find(c=>normNic(c.nic)===normNic(cNic.value));
+  const dup=customers.find(c=>normNic(c.nic)===normNic(cNic.value)&&c.id!==editCid);
   if(dup)return alert('❌ DUPLICATE NIC! Already registered to: '+dup.full+' ('+dup.no+')');
-  customers.push({id:uid(),no:nextCustNo(),joined:today(),group:cGroup.value,title:cTitle.value,full:cFull.value.trim(),other:cOther.value,nic:normNic(cNic.value),
-    phone:cPhone.value.trim(),email:cEmail.value,map:cMap.value,addr:cAddr.value,dob:cDob.value,gender:cGender.value,marital:cMar.value});
+  
+  if(editCid){
+    const c=customers.find(x=>x.id===editCid);
+    if(c){
+      c.group=cGroup.value;c.title=cTitle.value;c.full=cFull.value.trim();c.other=cOther.value;
+      c.nic=normNic(cNic.value);c.phone=cPhone.value.trim();c.email=cEmail.value;c.map=cMap.value;
+      c.addr=cAddr.value;c.dob=cDob.value;c.gender=cGender.value;c.marital=cMar.value;
+    }
+    editCid=null;
+    alert('✅ Customer updated!');
+  }else{
+    customers.push({id:uid(),no:nextCustNo(),joined:today(),group:cGroup.value,title:cTitle.value,full:cFull.value.trim(),other:cOther.value,nic:normNic(cNic.value),
+      phone:cPhone.value.trim(),email:cEmail.value,map:cMap.value,addr:cAddr.value,dob:cDob.value,gender:cGender.value,marital:cMar.value});
+    alert('✅ Customer saved!');
+  }
   save();nav('customers',navBtn('Customers'));
 }
+
 function delCustomer(id){
   if(!isAdmin())return alert('❌ Only Admin can delete');
   const c=customers.find(x=>x.id===id);if(!c)return;
@@ -713,7 +743,7 @@ function waLedger(id){
   const t=`*${settings.company}*\n📒 *LOAN STATEMENT*\n\nCustomer: ${c.title}. ${c.full} (${c.no})\nLoan No: *${l.no}*\nTotal Payable: ${fmt(l.totalPayable)}\nPaid: ${fmt(l.paid)}\n*Balance: ${fmt(l.totalPayable-l.paid)}*\n`+(ar>0?`⚠️ *ARREARS: ${fmt(ar)}*\n`:'')+(nd?`Next Payment: ${nd.date} (${fmt(nd.amount)})\n`:'🎉 SETTLED\n')+`\n*Payments:*\n${lines||'No payments\n'}\nThank you! 🙏`;
   waSend(c.phone,t);
 }
-/* ======== PART 2 END - PART 3 MEKATA YATIN PASTE KARANNA ======== */
+
 /* ============ PAYMENTS ============ */
 function nextDue(l){let cum=0;for(const r of l.schedule){cum+=r.total;if(l.paid<cum-0.01)return{date:r.date,amount:cum-l.paid>r.total?r.total:cum-l.paid}}return null}
 function loanOptions(filter){
@@ -1024,7 +1054,7 @@ function pgUsers(){
   ${users.map(u=>`<tr><td><b>${esc(u.name)}</b></td><td>${esc(u.username)}</td>
   <td>${admin?`<select onchange="setRole('${u.id}',this.value)" style="margin:0"><option ${u.role==='Admin'?'selected':''}>Admin</option><option ${u.role==='Manager'?'selected':''}>Manager</option><option ${u.role==='Officer'?'selected':''}>Officer</option></select>`:u.role}</td>
   <td>${admin?`<input type="number" value="${u.limit||0}" style="width:140px;margin:0" onchange="setLimit('${u.id}',this.value)">`:fmt(u.limit||0)}</td>
-  <td>${admin&&u.id!==cur.id?`<button class="btn red sm" onclick="delUser('${u.id}')">🗑️</button>`:''}</td></tr>`).join('')}</table></div>`;
+  <td>${admin&&u.id!==cur.id?`<button class="btn red sm" onclick="delUser('${u.id}')">🗑️ Delete</button>`:''}</td></tr>`).join('')}</table></div>`;
 }
 function setRole(id,v){if(!isAdmin())return;const u=users.find(x=>x.id===id);u.role=v;if(v==='Admin')u.limit=999999999;save()}
 function setLimit(id,v){if(!isAdmin())return;users.find(x=>x.id===id).limit=+v;save()}
@@ -1092,71 +1122,6 @@ function fullClear(){
 /* ============ INIT ============ */
 applyBrand();
 if(cur&&users.find(u=>u.id===cur.id))boot();
-/* ===== CUSTOMER EDIT OPTION ===== */
-let editCid=null;
-
-/* Customers page - redefine with Edit button */
-function pgCustomers(){
-  const ec=editCid?customers.find(x=>x.id===editCid):null;
-  return `<div class="card"><h3 class="sec">${ec?'✏️ EDIT Customer: '+esc(ec.no)+' - '+esc(ec.full):'Create Customer (Next No: <b>'+nextCustNo()+'</b>)'}</h3><div class="grid g4">
-    <div><label>Group</label><select id="cGroup"><option value="">-- None --</option>${groups.map(g=>`<option value="${g.id}" ${ec&&ec.group===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}</select></div>
-    <div><label>Title</label><select id="cTitle">${['Mr','Mrs','Miss','Rev','Dr'].map(t=>`<option ${ec&&ec.title===t?'selected':''}>${t}</option>`).join('')}</select></div>
-    <div><label>Full Name *</label><input id="cFull" value="${ec?esc(ec.full):''}"></div>
-    <div><label>Other Names</label><input id="cOther" value="${ec?esc(ec.other||''):''}"></div>
-    <div><label>NIC *</label><input id="cNic" value="${ec?esc(ec.nic):''}" oninput="nicCheck()"><div id="nicWarn" style="color:var(--bad);font-size:12px;margin-top:-6px;margin-bottom:8px"></div></div>
-    <div><label>Phone No *</label><input id="cPhone" value="${ec?esc(ec.phone):''}"></div>
-    <div><label>Email</label><input id="cEmail" type="email" value="${ec?esc(ec.email||''):''}"></div>
-    <div><label>Location (Google Map link)</label><input id="cMap" value="${ec?esc(ec.map||''):''}" placeholder="https://maps.google.com/..."></div>
-    <div><label>Address</label><input id="cAddr" value="${ec?esc(ec.addr||''):''}"></div>
-    <div><label>Date of Birth</label><input id="cDob" type="date" value="${ec?esc(ec.dob||''):''}"></div>
-    <div><label>Gender</label><select id="cGender">${['Male','Female'].map(t=>`<option ${ec&&ec.gender===t?'selected':''}>${t}</option>`).join('')}</select></div>
-    <div><label>Marital Status</label><select id="cMar">${['Single','Married','Divorced','Widowed'].map(t=>`<option ${ec&&ec.marital===t?'selected':''}>${t}</option>`).join('')}</select></div>
-    </div>
-    <button class="btn ${ec?'orange':'green'}" onclick="addCustomer()">${ec?'💾 Update Customer':'+ Save Customer'}</button>
-    ${ec?`<button class="btn gray" style="margin-left:8px" onclick="editCid=null;nav('customers',navBtn('Customers'))">✖ Cancel Edit</button>`:''}
-    </div>
-  <div class="card"><div class="secrow"><h3>Customers (${customers.length})</h3>${xlsBtn('tblCust','customers')}</div>
-  <table id="tblCust"><tr><th>Cust No</th><th>Name</th><th>NIC</th><th>Phone</th><th>Group</th><th>Joined</th><th>Map</th><th>Loans</th><th>Actions</th></tr>
-  ${customers.map(c=>{const g=groups.find(x=>x.id===c.group);const ln=loans.filter(l=>l.customerId===c.id&&l.status!=='settled').length;
-   return `<tr><td><b>${esc(c.no)}</b></td><td><b>${esc(c.title)}. ${esc(c.full)}</b><br><small>${esc(c.email)}</small></td><td>${esc(c.nic)}</td><td>${esc(c.phone)}</td>
-   <td>${g?esc(g.name):'-'}</td><td>${esc(c.joined)}</td><td>${c.map?`<a href="${esc(c.map)}" target="_blank">📍 Map</a>`:'-'}</td>
-   <td>${ln?`<span class="badge b-active">${ln} active</span>`:'<span class="badge b-settled">clear</span>'}</td>
-   <td><button class="btn orange sm" onclick="editCustomer('${c.id}')">✏️ Edit</button>
-   ${isAdmin()?`<button class="btn red sm" onclick="delCustomer('${c.id}')">🗑️</button>`:''}</td></tr>`}).join('')||'<tr><td colspan=9>No customers</td></tr>'}</table></div>`;
-}
-
-/* Edit button - form ekata data load karanawa */
-function editCustomer(id){
-  editCid=id;
-  nav('customers',navBtn('Customers'));
-  window.scrollTo({top:0,behavior:'smooth'});
-}
-
-/* NIC check - edit karaddi thamange NIC eka duplicate kiyala pennanne na */
-function nicCheck(){
-  const dup=customers.find(c=>normNic(c.nic)===normNic(cNic.value)&&cNic.value.trim()&&c.id!==editCid);
-  nicWarn.textContent=dup?'⚠️ NIC already registered to: '+dup.full+' ('+dup.no+')':'';
-}
-
-/* Save - create OR update */
-function addCustomer(){
-  if(!cFull.value.trim()||!cNic.value.trim()||!cPhone.value.trim())return alert('Full name, NIC & Phone are required');
-  const dup=customers.find(c=>normNic(c.nic)===normNic(cNic.value)&&c.id!==editCid);
-  if(dup)return alert('❌ DUPLICATE NIC! Already registered to: '+dup.full+' ('+dup.no+')');
-  if(editCid){
-    /* UPDATE existing customer - Cust No, Join Date, Documents ehemama thiyenawa */
-    const c=customers.find(x=>x.id===editCid);if(!c)return;
-    c.group=cGroup.value;c.title=cTitle.value;c.full=cFull.value.trim();c.other=cOther.value;
-    c.nic=normNic(cNic.value);c.phone=cPhone.value.trim();c.email=cEmail.value;c.map=cMap.value;
-    c.addr=cAddr.value;c.dob=cDob.value;c.gender=cGender.value;c.marital=cMar.value;
-    editCid=null;
-    save();alert('✅ Customer updated!');nav('customers',navBtn('Customers'));
-    return;
-  }
-  customers.push({id:uid(),no:nextCustNo(),joined:today(),group:cGroup.value,title:cTitle.value,full:cFull.value.trim(),other:cOther.value,nic:normNic(cNic.value),
-    phone:cPhone.value.trim(),email:cEmail.value,map:cMap.value,addr:cAddr.value,dob:cDob.value,gender:cGender.value,marital:cMar.value});
-  save();nav('customers',navBtn('Customers'));
-}
 </script>
 </body>
 </html>
