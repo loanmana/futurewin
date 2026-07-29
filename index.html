@@ -1327,7 +1327,7 @@ function login() {
       if (userData) {
         cur = userData;
         localStorage.setItem('lms_session', JSON.stringify(cur));
-        boot();
+        boot();}
       } else {
         alert('වැරදි Password එකක්!');
       }
