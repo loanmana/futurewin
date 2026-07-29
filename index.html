@@ -106,7 +106,23 @@ h3.sec{color:var(--p);margin-bottom:12px;font-size:16px}
 
 <div id="receiptArea"></div>
 
-<script>
+<script>// Firebase Configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyBJvhscCIrI58fKW3MPF-oPJpDB6kAu-R4",
+  authDomain: "futurewin-5ebf8.firebaseapp.com",
+  databaseURL: "https://futurewin-5ebf8-default-rtdb.firebaseio.com",
+  projectId: "futurewin-5ebf8",
+  storageBucket: "futurewin-5ebf8.firebasestorage.app",
+  messagingSenderId: "431053297143",
+  appId: "1:431053297143:web:97397d3c969520e0018af2",
+  measurementId: "G-7LMF62507T"
+};
+
+// Initialize Firebase
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
+const dbRef = firebase.database();
 /* ============ STORAGE ============ */
 const db={g:(k,d)=>JSON.parse(localStorage.getItem('lms_'+k))??d, s:(k,v)=>localStorage.setItem('lms_'+k,JSON.stringify(v))};
 let users=db.g('users',[]),groups=db.g('groups',[]),customers=db.g('customers',[]),
@@ -139,17 +155,90 @@ const xlsBtn=(id,name)=>`<button class="btn xl sm" onclick="exportXls('${id}','$
 /* ============ AUTH ============ */
 function toggleAuth(s){document.getElementById('loginForm').classList.toggle('hidden',s);document.getElementById('signupForm').classList.toggle('hidden',!s)}
 function signup(){
-  const n=suName.value.trim(),u=suUser.value.trim(),p=suPass.value;
-  if(!n||!u||!p)return alert('Fill all fields');
-  if(users.find(x=>x.username===u))return alert('Username already exists');
-  const first=users.length===0;
-  users.push({id:uid(),name:n,username:u,password:p,role:first?'Admin':'Officer',limit:first?999999999:0});
-  save();alert(first?'Admin account created! Please login.':'Account created (Officer). Please login.');toggleAuth(0);
+  function signup() {
+  const nameInput = document.getElementById('suName');
+  const userInput = document.getElementById('suUser');
+  const passInput = document.getElementById('suPass');
+
+  const n = nameInput ? nameInput.value.trim() : '';
+  const u = userInput ? userInput.value.trim() : '';
+  const p = passInput ? passInput.value : '';
+
+  if (!n || !u || !p) {
+    alert('කරුණාකර සියලුම විස්තර (Full Name, Username, Password) ඇතුළත් කරන්න.');
+    return;
+  }
+
+  // Firebase Realtime Database එකේ Username එක කලින් තියෙනවද බලනවා
+  dbRef.ref('users').orderByChild('username').equalTo(u).once('value', snapshot => {
+    if (snapshot.exists()) {
+      alert('මෙම Username එක දැනටමත් භාවිතයේ පවතී. වෙනත් එකක් ඇතුළත් කරන්න.');
+    } else {
+      // පළමු User ද නැද්ද කියා පරීක්ෂා කිරීම
+      dbRef.ref('users').once('value', snap => {
+        const isFirstUser = !snap.exists();
+        const newUserId = Date.now().toString();
+
+        const userData = {
+          id: newUserId,
+          name: n,
+          username: u,
+          password: p,
+          role: isFirstUser ? 'Admin' : 'Officer',
+          limit: isFirstUser ? 999999999 : 0
+        };
+
+        // Realtime Database එකට Save කිරීම ('users' node එකට)
+        dbRef.ref('users/' + newUserId).set(userData)
+          .then(() => {
+            alert(isFirstUser ? 'Admin ගිණුම සාර්ථකව සෑදුවා! දැන් Login වන්න.' : 'ගිණුම සාර්ථකව සෑදුවා (Officer)! දැන් Login වන්න.');
+            
+            // Input Boxes Clear කිරීම
+            nameInput.value = '';
+            userInput.value = '';
+            passInput.value = '';
+
+            // Login Screen එකට මාරු කිරීම
+            toggleAuth(0);
+          })
+          .catch(error => {
+            alert('Error: ' + error.message);
+          });
+      });
+    }
+  });
 }
 function login(){
-  const u=users.find(x=>x.username===liUser.value.trim()&&x.password===liPass.value);
-  if(!u)return alert('Invalid username or password');
-  cur=u;db.s('session',u);boot();
+  function login() {
+  const uVal = document.getElementById('liUser').value.trim();
+  const pVal = document.getElementById('liPass').value;
+
+  if (!uVal || !pVal) {
+    alert('කරුණාකර Username සහ Password ඇතුළත් කරන්න.');
+    return;
+  }
+
+  dbRef.ref('users').orderByChild('username').equalTo(uVal).once('value', snapshot => {
+    if (snapshot.exists()) {
+      let userData = null;
+      snapshot.forEach(childSnap => {
+        const user = childSnap.val();
+        if (user.password === pVal) {
+          userData = user;
+        }
+      });
+
+      if (userData) {
+        cur = userData;
+        localStorage.setItem('lms_session', JSON.stringify(cur));
+        boot();
+      } else {
+        alert('වැරදි Password එකක්!');
+      }
+    } else {
+      alert('එවැනි Username එකක් සොයාගත නොහැක!');
+    }
+  });
 }
 function logout(){cur=null;db.s('session',null);location.reload()}
 function boot(){
