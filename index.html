@@ -106,7 +106,139 @@ h3.sec{color:var(--p);margin-bottom:12px;font-size:16px}
 
 <div id="receiptArea"></div>
 
+<script><!-- Firebase Compatible SDKs -->
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
 <script>
+  // 1. Your Firebase Configuration (From Image)
+  const firebaseConfig = {
+    apiKey: "AIzaSyBJvhscCIrI58fKW3MPF-oPJpDB6kAu-R4",
+    authDomain: "futurewin-5ebf8.firebaseapp.com",
+    databaseURL: "https://futurewin-5ebf8-default-rtdb.firebaseio.com",
+    projectId: "futurewin-5ebf8",
+    storageBucket: "futurewin-5ebf8.firebasestorage.app",
+    messagingSenderId: "431053297143",
+    appId: "1:431053297143:web:97397d3c969520e0018af2",
+    measurementId: "G-7LMF62507T"
+  };
+
+  // Initialize Firebase
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.database();
+
+  let loans = [];
+
+  // Check Login Status on Page Load
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      console.log("Logged in as:", user.email);
+      listenToDatabase();
+    } else {
+      const email = prompt("System Login\nPlease enter your Email:");
+      const password = prompt("Please enter your Password:");
+      if (email && password) {
+        auth.signInWithEmailAndPassword(email, password)
+          .catch(error => {
+            alert("Login Failed: " + error.message);
+            location.reload();
+          });
+      }
+    }
+  });
+
+  // Realtime Database Sync Listener
+  function listenToDatabase() {
+    db.ref('loans').on('value', (snapshot) => {
+      const data = snapshot.val();
+      loans = [];
+      for (let id in data) {
+        loans.push({ firebaseId: id, ...data[id] });
+      }
+      renderTable();
+    });
+  }
+
+  // Save Loan to Firebase
+  const loanForm = document.getElementById('loanForm');
+  if (loanForm) {
+    loanForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+
+      const clientName = document.getElementById('clientName').value;
+      const amount = parseFloat(document.getElementById('amount').value);
+      const rate = parseFloat(document.getElementById('rate').value);
+      const months = parseInt(document.getElementById('months').value);
+
+      const monthlyRate = (rate / 100) / 12;
+      const emi = (amount * monthlyRate * Math.pow(1 + monthlyRate, months)) / (Math.pow(1 + monthlyRate, months) - 1);
+
+      const newLoan = {
+        date: new Date().toISOString().split('T')[0],
+        clientName,
+        amount,
+        rate,
+        months,
+        emi: emi.toFixed(2),
+        status: 'Active'
+      };
+
+      db.ref('loans').push(newLoan);
+      loanForm.reset();
+    });
+  }
+
+  // Toggle Status in Firebase
+  function toggleStatus(firebaseId) {
+    const loan = loans.find(l => l.firebaseId === firebaseId);
+    if (loan) {
+      const newStatus = loan.status === 'Active' ? 'Paid' : 'Active';
+      db.ref('loans/' + firebaseId).update({ status: newStatus });
+    }
+  }
+
+  // Delete Record from Firebase
+  function deleteLoan(firebaseId) {
+    if (confirm('Are you sure you want to delete this record?')) {
+      db.ref('loans/' + firebaseId).remove();
+    }
+  }
+
+  // Render Table View
+  function renderTable() {
+    const loanTableBody = document.getElementById('loanTableBody');
+    if (!loanTableBody) return;
+    
+    loanTableBody.innerHTML = '';
+    if (loans.length === 0) {
+      loanTableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">No records found.</td></tr>';
+      return;
+    }
+
+    loans.forEach(loan => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${loan.date}</td>
+        <td><strong>${loan.clientName}</strong></td>
+        <td>LKR ${parseFloat(loan.amount).toLocaleString()}</td>
+        <td>${loan.rate}%</td>
+        <td>${loan.months}</td>
+        <td>LKR ${parseFloat(loan.emi).toLocaleString()}</td>
+        <td>
+          <span class="badge ${loan.status === 'Active' ? 'badge-active' : 'badge-paid'}" onclick="toggleStatus('${loan.firebaseId}')">
+            ${loan.status}
+          </span>
+        </td>
+        <td>
+          <button class="btn-danger" onclick="deleteLoan('${loan.firebaseId}')">Delete</button>
+        </td>
+      `;
+      loanTableBody.appendChild(tr);
+    });
+  }
+</script>
 /* ============ STORAGE ============ */
 const db={g:(k,d)=>JSON.parse(localStorage.getItem('lms_'+k))??d, s:(k,v)=>localStorage.setItem('lms_'+k,JSON.stringify(v))};
 let users=db.g('users',[]),groups=db.g('groups',[]),customers=db.g('customers',[]),
