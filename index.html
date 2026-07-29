@@ -1335,7 +1335,9 @@ function login() {
       alert('එවැනි Username එකක් සොයාගත නොහැක!');
     }
   });
-}/* ================= AUTH FUNCTIONS ================= */
+}
+
+/* ================= AUTH FUNCTIONS ================= */
 
 function toggleAuth(s) {
   const lForm = document.getElementById('loginForm');
@@ -1363,7 +1365,6 @@ function signup() {
     return;
   }
 
-  // Firebase Check & Save
   dbRef.ref('users').orderByChild('username').equalTo(u).once('value', snapshot => {
     if (snapshot.exists()) {
       alert('මෙම Username එක දැනටමත් භාවිතයේ පවතී.');
@@ -1428,7 +1429,7 @@ function login() {
     }
   });
 }
+
 </script>
 </body>
 </html>
-
