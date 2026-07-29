@@ -1397,27 +1397,7 @@ function signup() {
     }
   });
 }
-
-function login() {
-  const uVal = document.getElementById('liUser').value.trim();
-  const pVal = document.getElementById('liPass').value;
-
-  if (!uVal || !pVal) {
-    alert('කරුණාකර Username සහ Password ඇතුළත් කරන්න.');
-    return;
-  }
-
-  dbRef.ref('users').orderByChild('username').equalTo(uVal).once('value', snapshot => {
-    if (snapshot.exists()) {
-      let userData = null;
-      snapshot.forEach(childSnap => {
-        const user = childSnap.val();
-        if (user.password === pVal) {
-          userData = user;
-        }
-      });
-
-      if (userData) {
+if (userData) {
         cur = userData;
         localStorage.setItem('lms_session', JSON.stringify(cur));
         boot();
@@ -1428,6 +1408,7 @@ function login() {
       alert('එවැනි Username එකක් සොයාගත නොහැක!');
     }
   });
+}
 </script>
 </body>
 </html>
