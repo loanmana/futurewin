@@ -1245,6 +1245,96 @@ function addCustomer(){
   customers.push({id:uid(),no:nextCustNo(),joined:today(),group:cGroup.value,title:cTitle.value,full:cFull.value.trim(),other:cOther.value,nic:normNic(cNic.value),
     phone:cPhone.value.trim(),email:cEmail.value,map:cMap.value,addr:cAddr.value,dob:cDob.value,gender:cGender.value,marital:cMar.value});
   save();nav('customers',navBtn('Customers'));
+}/* Auth Functions */
+function toggleAuth(s) {
+  const lForm = document.getElementById('loginForm');
+  const sForm = document.getElementById('signupForm');
+  if (s) {
+    lForm.classList.add('hidden');
+    sForm.classList.remove('hidden');
+  } else {
+    sForm.classList.add('hidden');
+    lForm.classList.remove('hidden');
+  }
+}
+
+function signup() {
+  const nameInput = document.getElementById('suName');
+  const userInput = document.getElementById('suUser');
+  const passInput = document.getElementById('suPass');
+
+  const n = nameInput ? nameInput.value.trim() : '';
+  const u = userInput ? userInput.value.trim() : '';
+  const p = passInput ? passInput.value : '';
+
+  if (!n || !u || !p) {
+    alert('කරුණාකර සියලුම විස්තර ඇතුළත් කරන්න.');
+    return;
+  }
+
+  dbRef.ref('users').orderByChild('username').equalTo(u).once('value', snapshot => {
+    if (snapshot.exists()) {
+      alert('මෙම Username එක දැනටමත් භාවිතයේ පවතී.');
+    } else {
+      dbRef.ref('users').once('value', snap => {
+        const isFirstUser = !snap.exists();
+        const newUserId = Date.now().toString();
+
+        const userData = {
+          id: newUserId,
+          name: n,
+          username: u,
+          password: p,
+          role: isFirstUser ? 'Admin' : 'Officer',
+          limit: isFirstUser ? 999999999 : 0
+        };
+
+        dbRef.ref('users/' + newUserId).set(userData)
+          .then(() => {
+            alert(isFirstUser ? 'Admin ගිණුම සාර්ථකව සෑදුවා! දැන් Login වන්න.' : 'ගිණුම සාර්ථකව සෑදුවා!');
+            nameInput.value = '';
+            userInput.value = '';
+            passInput.value = '';
+            toggleAuth(0);
+          })
+          .catch(error => {
+            alert('Error: ' + error.message);
+          });
+      });
+    }
+  });
+}
+
+function login() {
+  const uVal = document.getElementById('liUser').value.trim();
+  const pVal = document.getElementById('liPass').value;
+
+  if (!uVal || !pVal) {
+    alert('කරුණාකර Username සහ Password ඇතුළත් කරන්න.');
+    return;
+  }
+
+  dbRef.ref('users').orderByChild('username').equalTo(uVal).once('value', snapshot => {
+    if (snapshot.exists()) {
+      let userData = null;
+      snapshot.forEach(childSnap => {
+        const user = childSnap.val();
+        if (user.password === pVal) {
+          userData = user;
+        }
+      });
+
+      if (userData) {
+        cur = userData;
+        localStorage.setItem('lms_session', JSON.stringify(cur));
+        boot();
+      } else {
+        alert('වැරදි Password එකක්!');
+      }
+    } else {
+      alert('එවැනි Username එකක් සොයාගත නොහැක!');
+    }
+  });
 }
 </script>
 </body>
