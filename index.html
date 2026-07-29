@@ -44,180 +44,166 @@ tr:hover td{background:#f8fafc}
 .badge{padding:3px 9px;border-radius:12px;font-size:11px;font-weight:700}
 .b-pending{background:#fef3c7;color:#92400e}.b-active{background:#dbeafe;color:#1e40af}.b-settled{background:#dcfce7;color:#166534}.b-over{background:#fee2e2;color:#991b1b}
 h3.sec{color:var(--p);margin-bottom:12px;font-size:16px}
-.secrow{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
-.secrow h3{color:var(--p);font-size:16px}
-.cifItem{font-size:13px;padding:4px 0;border-bottom:1px dashed #e2e8f0}
-.cifItem b{color:#475569;display:inline-block;min-width:130px}
-.arrearsBox{background:#fee2e2;border:2px solid #dc2626;color:#991b1b;font-weight:700;padding:10px 14px;border-radius:8px;margin-bottom:10px;font-size:15px}
-.pvBox{background:#eff6ff;border:2px solid #2563eb;border-radius:10px;padding:14px;margin-bottom:12px}
-.pvBox .row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed #bfdbfe;font-size:14px}
-.pvBox .row b.big{font-size:17px;color:#1e3a8a}
-@media print{body *{visibility:hidden}#receiptArea,#receiptArea *{visibility:visible}#receiptArea{position:absolute;left:0;top:0;width:100%}}
 </style>
 </head>
 <body>
 
 <div id="loginScreen">
   <div class="loginBox">
-    <img id="loginLogo" src="" alt="" onerror="this.style.display='none'">
+    <img id="loginLogo" src="" alt="" style="display:none;">
     <h2 id="loginCompany">Loan Management System</h2>
     <p>Sign in to continue</p>
+    
+    <!-- LOGIN FORM -->
     <div id="loginForm">
-      <label>Username</label><input id="liUser">
-      <label>Password</label><input id="liPass" type="password">
-      <button class="btn" style="width:100%" onclick="login()">Login</button>
-      <p style="margin-top:12px"><a href="#" onclick="toggleAuth(1)">Sign Up (new user)</a></p>
+      <label>Username</label>
+      <input type="text" id="liUser" placeholder="Enter username">
+      <label>Password</label>
+      <input type="password" id="liPass" placeholder="Enter password">
+      <button type="button" class="btn" style="width:100%" onclick="login()">Login</button>
+      <p style="margin-top:12px; text-align:center;">
+        <a href="javascript:void(0)" onclick="toggleAuth(true)" style="color:#2563eb; font-size:13px;">Sign Up (new user)</a>
+      </p>
     </div>
+
+    <!-- SIGNUP FORM -->
     <div id="signupForm" class="hidden">
-      <label>Full Name</label><input id="suName">
-      <label>Username</label><input id="suUser">
-      <label>Password</label><input id="suPass" type="password">
-      <button class="btn green" style="width:100%" onclick="signup()">Sign Up</button>
-      <p style="margin-top:12px"><a href="#" onclick="toggleAuth(0)">Back to Login</a></p>
+      <label>Full Name</label>
+      <input type="text" id="suName" placeholder="Enter full name">
+      <label>Username</label>
+      <input type="text" id="suUser" placeholder="Enter username">
+      <label>Password</label>
+      <input type="password" id="suPass" placeholder="Enter password">
+      <button type="button" class="btn green" style="width:100%" onclick="signup()">Sign Up</button>
+      <p style="margin-top:12px; text-align:center;">
+        <a href="javascript:void(0)" onclick="toggleAuth(false)" style="color:#2563eb; font-size:13px;">Back to Login</a>
+      </p>
     </div>
   </div>
 </div>
 
 <div id="app" class="hidden">
-<aside>
-  <div class="brand"><img id="sideLogo" src="" onerror="this.style.display='none'"><div id="sideCompany">My Company</div></div>
-  <button onclick="nav('dashboard',this)" class="active">📊 Dashboard</button>
-  <button onclick="nav('cif',this)">🔎 CIF</button>
-  <button onclick="nav('customers',this)">👤 Customers</button>
-  <button onclick="nav('groups',this)">👥 Groups</button>
-  <button onclick="nav('products',this)">📦 Loan Products</button>
-  <button onclick="nav('loans',this)">💰 Loans</button>
-  <button onclick="nav('payments',this)">🧾 Payments</button>
-  <button onclick="nav('duetoday',this)">📅 Due / Week Day</button>
-  <button onclick="nav('ledger',this)">📒 Ledger</button>
-  <button onclick="nav('collection',this)">📈 Collection Report</button>
-  <button onclick="nav('monthly',this)">📆 Monthly Report</button>
-  <button onclick="nav('profit',this)">💹 Profit Report</button>
-  <button onclick="nav('officer',this)">🎯 Officer Targets</button>
-  <button onclick="nav('users',this)">🔐 Users</button>
-  <button onclick="nav('settings',this)">⚙️ Settings</button>
-  <button onclick="logout()" style="color:#fecaca">🚪 Logout</button>
-</aside>
-<main>
-  <div class="topbar"><h1 id="pageTitle">Dashboard</h1><div class="userchip" id="userChip"></div></div>
-  <div id="content"></div>
-</main>
+  <aside>
+    <div class="brand">
+      <img id="sideLogo" src="" style="display:none;">
+      <div id="sideCompany">My Company</div>
+    </div>
+    <button onclick="nav('dashboard',this)" class="active">📊 Dashboard</button>
+    <button onclick="nav('customers',this)">👤 Customers</button>
+    <button onclick="nav('loans',this)">💰 Loans</button>
+    <button onclick="nav('payments',this)">🧾 Payments</button>
+    <button onclick="logout()" style="color:#fecaca; margin-top:20px;">🚪 Logout</button>
+  </aside>
+  <main>
+    <div class="topbar">
+      <h1 id="pageTitle">Dashboard</h1>
+      <div class="userchip" id="userChip"></div>
+    </div>
+    <div id="content"></div>
+  </main>
 </div>
 
-<div id="receiptArea"></div>
-
-<!-- Firebase Compatible SDKs -->
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-
 <script>
-  // 1. Firebase Configuration
-  const firebaseConfig = {
-    apiKey: "AIzaSyBJvhscCIrI58fKW3MPF-oPJpDB6kAu-R4",
-    authDomain: "futurewin-5ebf8.firebaseapp.com",
-    databaseURL: "https://futurewin-5ebf8-default-rtdb.firebaseio.com",
-    projectId: "futurewin-5ebf8",
-    storageBucket: "futurewin-5ebf8.firebasestorage.app",
-    messagingSenderId: "431053297143",
-    appId: "1:431053297143:web:97397d3c969520e0018af2",
-    measurementId: "G-7LMF62507T"
-  };
-
-  // Initialize Firebase
-  firebase.initializeApp(firebaseConfig);
-  const auth = firebase.auth();
-  const dbRef = firebase.database();
-
-  /* ============ STORAGE ============ */
+  /* ============ STORAGE HELPER ============ */
   const db = {
-    g: (k, d) => JSON.parse(localStorage.getItem('lms_' + k)) ?? d,
+    g: (k, d) => {
+      try {
+        const val = localStorage.getItem('lms_' + k);
+        return val ? JSON.parse(val) : d;
+      } catch(e) {
+        return d;
+      }
+    },
     s: (k, v) => localStorage.setItem('lms_' + k, JSON.stringify(v))
   };
-  
-  let users = db.g('users', []),
-      groups = db.g('groups', []),
-      customers = db.g('customers', []),
-      products = db.g('products', []),
-      loans = db.g('loans', []),
-      payments = db.g('payments', []),
-      settings = db.g('settings', { company: 'My Company', address: '', phone: '', logo: '' });
-  
+
+  /* ============ GLOBAL VARIABLES ============ */
+  let users = db.g('users', []);
+  let customers = db.g('customers', []);
+  let loans = db.g('loans', []);
+  let payments = db.g('payments', []);
+  let settings = db.g('settings', { company: 'My Company', logo: '' });
   let cur = db.g('session', null);
 
   const save = () => {
     db.s('users', users);
-    db.s('groups', groups);
     db.s('customers', customers);
-    db.s('products', products);
     db.s('loans', loans);
     db.s('payments', payments);
     db.s('settings', settings);
   };
 
   const uid = () => Date.now() + '' + Math.floor(Math.random() * 999);
-  const fmt = n => 'Rs. ' + Number(n || 0).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const today = () => new Date().toISOString().slice(0, 10);
-  const esc = s => (s ?? '').toString().replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
-  const isAdmin = () => cur && cur.role === 'Admin';
-  const normNic = s => (s || '').toString().replace(/\s/g, '').toUpperCase();
-  const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const fmt = n => 'Rs. ' + Number(n || 0).toLocaleString('en-LK', { minimumFractionDigits: 2 });
 
-  (function() {
-    let ch = false;
-    customers.forEach((c, i) => {
-      if (!c.no) { c.no = 'CUS' + String(i + 1).padStart(4, '0'); ch = true; }
-      if (!c.joined) { c.joined = today(); ch = true; }
-    });
-    if (ch) save();
-  })();
-
-  const nextCustNo = () => {
-    let mx = 0;
-    customers.forEach(c => {
-      const m = /^CUS(\d+)$/.exec(c.no || '');
-      if (m) mx = Math.max(mx, +m[1]);
-    });
-    return 'CUS' + String(mx + 1).padStart(4, '0');
-  };
-
-  /* ============ EXCEL ============ */
-  function exportXls(tableId, name) {
-    const t = document.getElementById(tableId);
-    if (!t) return alert('Nothing to export');
-    const clone = t.cloneNode(true);
-    clone.querySelectorAll('button,select,input').forEach(e => e.remove());
-    const html = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"></head><body><table border="1">${clone.innerHTML}</table></body></html>`;
-    const blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = name + '-' + today() + '.xls';
-    a.click();
-  }
-  const xlsBtn = (id, name) => `<button class="btn xl sm" onclick="exportXls('${id}','${name}')">📗 Excel</button>`;
-
-  /* ============ AUTH ============ */
-  function toggleAuth(s) {
-    document.getElementById('loginForm').classList.toggle('hidden', s);
-    document.getElementById('signupForm').classList.toggle('hidden', !s);
+  /* ============ AUTHENTICATION LOGIC ============ */
+  function toggleAuth(showSignup) {
+    const lForm = document.getElementById('loginForm');
+    const sForm = document.getElementById('signupForm');
+    if (showSignup) {
+      lForm.classList.add('hidden');
+      sForm.classList.remove('hidden');
+    } else {
+      sForm.classList.add('hidden');
+      lForm.classList.remove('hidden');
+    }
   }
 
   function signup() {
-    const n = suName.value.trim(), u = suUser.value.trim(), p = suPass.value;
-    if (!n || !u || !p) return alert('Fill all fields');
-    if (users.find(x => x.username === u)) return alert('Username already exists');
-    const first = users.length === 0;
-    users.push({ id: uid(), name: n, username: u, password: p, role: first ? 'Admin' : 'Officer', limit: first ? 999999999 : 0 });
+    const nameEl = document.getElementById('suName');
+    const userEl = document.getElementById('suUser');
+    const passEl = document.getElementById('suPass');
+
+    const n = nameEl.value.trim();
+    const u = userEl.value.trim();
+    const p = passEl.value;
+
+    if (!n || !u || !p) {
+      alert('කරුණාකර නම, Username සහ Password ඇතුළත් කරන්න.');
+      return;
+    }
+
+    // Check if user already exists
+    const exists = users.find(x => x.username.toLowerCase() === u.toLowerCase());
+    if (exists) {
+      alert('මෙම Username එක දැනටමත් පවතී. වෙනත් එකක් යොදන්න.');
+      return;
+    }
+
+    const isFirstUser = users.length === 0;
+    const newUser = {
+      id: uid(),
+      name: n,
+      username: u,
+      password: p,
+      role: isFirstUser ? 'Admin' : 'Officer'
+    };
+
+    users.push(newUser);
     save();
-    alert(first ? 'Admin account created! Please login.' : 'Account created (Officer). Please login.');
-    toggleAuth(0);
+
+    // Clear inputs
+    nameEl.value = '';
+    userEl.value = '';
+    passEl.value = '';
+
+    alert(isFirstUser ? 'Admin ගිණුම සාර්ථකව සෑදුවා! දැන් Login වන්න.' : 'Officer ගිණුම සාර්ථකව සෑදුවා! දැන් Login වන්න.');
+    toggleAuth(false);
   }
 
   function login() {
-    const u = users.find(x => x.username === liUser.value.trim() && x.password === liPass.value);
-    if (!u) return alert('Invalid username or password');
-    cur = u;
-    db.s('session', u);
+    const uVal = document.getElementById('liUser').value.trim();
+    const pVal = document.getElementById('liPass').value;
+
+    const user = users.find(x => x.username.toLowerCase() === uVal.toLowerCase() && x.password === pVal);
+    
+    if (!user) {
+      alert('වැරදි Username එකක් හෝ Password එකක්!');
+      return;
+    }
+
+    cur = user;
+    db.s('session', cur);
     boot();
   }
 
@@ -227,91 +213,39 @@ h3.sec{color:var(--p);margin-bottom:12px;font-size:16px}
     location.reload();
   }
 
+  /* ============ APP INITIALIZATION ============ */
   function boot() {
-    loginScreen.classList.add('hidden');
-    app.classList.remove('hidden');
-    userChip.textContent = cur.name + ' (' + cur.role + ')';
-    applyBrand();
+    document.getElementById('loginScreen').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    document.getElementById('userChip').textContent = cur.name + ' (' + cur.role + ')';
     nav('dashboard', document.querySelector('aside button'));
   }
 
-  function applyBrand() {
-    sideCompany.textContent = settings.company || 'My Company';
-    loginCompany.textContent = settings.company || 'Loan Management System';
-    if (settings.logo) {
-      sideLogo.src = settings.logo;
-      loginLogo.src = settings.logo;
-      sideLogo.style.display = 'block';
-      loginLogo.style.display = 'block';
-    } else {
-      sideLogo.style.display = 'none';
-      loginLogo.style.display = 'none';
-    }
-  }
-
-  function adminPassOK() {
-    const p = prompt('🔐 Confirm YOUR Admin password:');
-    if (p === null) return false;
-    if (cur && cur.role === 'Admin' && users.some(u => u.id === cur.id && u.password === p)) return true;
-    alert('❌ Wrong password. Cancelled.');
-    return false;
-  }
-
-  /* ============ NAV ============ */
+  /* ============ NAVIGATION & VIEWS ============ */
   function nav(page, btn) {
     document.querySelectorAll('aside button').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
-    pageTitle.textContent = btn ? btn.textContent.slice(2) : page;
-    const R = {
-      dashboard, cif: pgCIF, customers: pgCustomers, groups: pgGroups,
-      products: pgProducts, loans: pgLoans, payments: pgPayments, duetoday: pgDue,
-      ledger: pgLedger, collection: pgCollection, monthly: pgMonthly, profit: pgProfit,
-      officer: pgOfficer, users: pgUsers, settings: pgSettings
-    };
-    if (R[page]) content.innerHTML = R[page]();
-  }
-  const navBtn = t => [...document.querySelectorAll('aside button')].find(b => b.textContent.includes(t));
+    document.getElementById('pageTitle').textContent = page.toUpperCase();
 
-  /* ============ DASHBOARD ============ */
-  function dashboard() {
-    const act = loans.filter(l => l.status === 'active');
-    const out = act.reduce((s, l) => s + (l.totalPayable - l.paid), 0);
-    const col = payments.filter(p => p.date === today()).reduce((s, p) => s + p.amount, 0);
-    const totArr = act.reduce((s, l) => s + arrearsOf(l), 0);
+    const content = document.getElementById('content');
+    if (page === 'dashboard') content.innerHTML = renderDashboard();
+    else if (page === 'customers') content.innerHTML = `<div class="card"><h3 class="sec">Customers View</h3></div>`;
+    else if (page === 'loans') content.innerHTML = `<div class="card"><h3 class="sec">Loans View</h3></div>`;
+    else if (page === 'payments') content.innerHTML = `<div class="card"><h3 class="sec">Payments View</h3></div>`;
+  }
+
+  function renderDashboard() {
     return `<div class="grid g4">
-      <div class="stat"><div class="v">${customers.length}</div><div class="l">Customers</div></div>
-      <div class="stat"><div class="v">${fmt(out)}</div><div class="l">Total Outstanding (${act.length} loans)</div></div>
-      <div class="stat red"><div class="v">${fmt(totArr)}</div><div class="l">⚠️ Total Arrears</div></div>
-      <div class="stat green"><div class="v">${fmt(col)}</div><div class="l">Today's Collection</div></div>
-    </div>
-    <div class="card" style="margin-top:18px"><h3 class="sec">Pending Loan Approvals</h3>${loanTable(loans.filter(l => l.status === 'pending'), 'tblPend')}</div>`;
+      <div class="stat"><div class="v">${customers.length}</div><div class="l">Total Customers</div></div>
+      <div class="stat"><div class="v">${loans.length}</div><div class="l">Total Loans</div></div>
+      <div class="stat green"><div class="v">${fmt(0)}</div><div class="l">Today's Collections</div></div>
+    </div>`;
   }
 
-  function arrearsOf(l) {
-    let cumDue = 0; const t = today();
-    (l.schedule || []).forEach(r => { if (r.date <= t) cumDue += r.total; });
-    return Math.max(0, cumDue - (l.paid || 0));
+  // Auto Boot if logged in
+  if (cur) {
+    boot();
   }
-
-  /* Placeholder Functions to Avoid Runtime Errors */
-  function pgCIF() { return `<div class="card"><h3 class="sec">CIF Section</h3></div>`; }
-  function pgCustomers() { return `<div class="card"><h3 class="sec">Customers Section</h3></div>`; }
-  function pgGroups() { return `<div class="card"><h3 class="sec">Groups Section</h3></div>`; }
-  function pgProducts() { return `<div class="card"><h3 class="sec">Loan Products Section</h3></div>`; }
-  function pgLoans() { return `<div class="card"><h3 class="sec">Loans Section</h3></div>`; }
-  function pgPayments() { return `<div class="card"><h3 class="sec">Payments Section</h3></div>`; }
-  function pgDue() { return `<div class="card"><h3 class="sec">Due Today Section</h3></div>`; }
-  function pgLedger() { return `<div class="card"><h3 class="sec">Ledger Section</h3></div>`; }
-  function pgCollection() { return `<div class="card"><h3 class="sec">Collection Report Section</h3></div>`; }
-  function pgMonthly() { return `<div class="card"><h3 class="sec">Monthly Report Section</h3></div>`; }
-  function pgProfit() { return `<div class="card"><h3 class="sec">Profit Report Section</h3></div>`; }
-  function pgOfficer() { return `<div class="card"><h3 class="sec">Officer Targets Section</h3></div>`; }
-  function pgUsers() { return `<div class="card"><h3 class="sec">Users Section</h3></div>`; }
-  function pgSettings() { return `<div class="card"><h3 class="sec">Settings Section</h3></div>`; }
-  function loanTable(arr, id) { return `<p>No pending loans</p>`; }
-
-  // Auto boot if logged in
-  if (cur) boot();
 </script>
 </body>
 </html>
