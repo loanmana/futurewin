@@ -106,23 +106,7 @@ h3.sec{color:var(--p);margin-bottom:12px;font-size:16px}
 
 <div id="receiptArea"></div>
 
-<script>// Firebase Configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyBJvhscCIrI58fKW3MPF-oPJpDB6kAu-R4",
-  authDomain: "futurewin-5ebf8.firebaseapp.com",
-  databaseURL: "https://futurewin-5ebf8-default-rtdb.firebaseio.com",
-  projectId: "futurewin-5ebf8",
-  storageBucket: "futurewin-5ebf8.firebasestorage.app",
-  messagingSenderId: "431053297143",
-  appId: "1:431053297143:web:97397d3c969520e0018af2",
-  measurementId: "G-7LMF62507T"
-};
-
-// Initialize Firebase
-if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
-}
-const dbRef = firebase.database();
+<script>
 /* ============ STORAGE ============ */
 const db={g:(k,d)=>JSON.parse(localStorage.getItem('lms_'+k))??d, s:(k,v)=>localStorage.setItem('lms_'+k,JSON.stringify(v))};
 let users=db.g('users',[]),groups=db.g('groups',[]),customers=db.g('customers',[]),
@@ -155,90 +139,1023 @@ const xlsBtn=(id,name)=>`<button class="btn xl sm" onclick="exportXls('${id}','$
 /* ============ AUTH ============ */
 function toggleAuth(s){document.getElementById('loginForm').classList.toggle('hidden',s);document.getElementById('signupForm').classList.toggle('hidden',!s)}
 function signup(){
-  function signup() {
-  const nameInput = document.getElementById('suName');
-  const userInput = document.getElementById('suUser');
-  const passInput = document.getElementById('suPass');
-
-  const n = nameInput ? nameInput.value.trim() : '';
-  const u = userInput ? userInput.value.trim() : '';
-  const p = passInput ? passInput.value : '';
-
-  if (!n || !u || !p) {
-    alert('කරුණාකර සියලුම විස්තර (Full Name, Username, Password) ඇතුළත් කරන්න.');
-    return;
-  }
-
-  // Firebase Realtime Database එකේ Username එක කලින් තියෙනවද බලනවා
-  dbRef.ref('users').orderByChild('username').equalTo(u).once('value', snapshot => {
-    if (snapshot.exists()) {
-      alert('මෙම Username එක දැනටමත් භාවිතයේ පවතී. වෙනත් එකක් ඇතුළත් කරන්න.');
-    } else {
-      // පළමු User ද නැද්ද කියා පරීක්ෂා කිරීම
-      dbRef.ref('users').once('value', snap => {
-        const isFirstUser = !snap.exists();
-        const newUserId = Date.now().toString();
-
-        const userData = {
-          id: newUserId,
-          name: n,
-          username: u,
-          password: p,
-          role: isFirstUser ? 'Admin' : 'Officer',
-          limit: isFirstUser ? 999999999 : 0
-        };
-
-        // Realtime Database එකට Save කිරීම ('users' node එකට)
-        dbRef.ref('users/' + newUserId).set(userData)
-          .then(() => {
-            alert(isFirstUser ? 'Admin ගිණුම සාර්ථකව සෑදුවා! දැන් Login වන්න.' : 'ගිණුම සාර්ථකව සෑදුවා (Officer)! දැන් Login වන්න.');
-            
-            // Input Boxes Clear කිරීම
-            nameInput.value = '';
-            userInput.value = '';
-            passInput.value = '';
-
-            // Login Screen එකට මාරු කිරීම
-            toggleAuth(0);
-          })
-          .catch(error => {
-            alert('Error: ' + error.message);
-          });
-      });
-    }
-  });
+  const n=suName.value.trim(),u=suUser.value.trim(),p=suPass.value;
+  if(!n||!u||!p)return alert('Fill all fields');
+  if(users.find(x=>x.username===u))return alert('Username already exists');
+  const first=users.length===0;
+  users.push({id:uid(),name:n,username:u,password:p,role:first?'Admin':'Officer',limit:first?999999999:0});
+  save();alert(first?'Admin account created! Please login.':'Account created (Officer). Please login.');toggleAuth(0);
 }
 function login(){
- function login() {
-  const uVal = document.getElementById('liUser').value.trim();
-  const pVal = document.getElementById('liPass').value;
+  const u=users.find(x=>x.username===liUser.value.trim()&&x.password===liPass.value);
+  if(!u)return alert('Invalid username or password');
+  cur=u;db.s('session',u);boot();
+}
+function logout(){cur=null;db.s('session',null);location.reload()}
+function boot(){
+  loginScreen.classList.add('hidden');app.classList.remove('hidden');
+  userChip.textContent=cur.name+' ('+cur.role+')';
+  applyBrand();nav('dashboard',document.querySelector('aside button'));
+}
+function applyBrand(){
+  sideCompany.textContent=settings.company;loginCompany.textContent=settings.company;
+  sideLogo.src=settings.logo||'';loginLogo.src=settings.logo||'';
+  sideLogo.style.display=settings.logo?'':'none';loginLogo.style.display=settings.logo?'':'none';
+}
+function adminPassOK(){
+  const p=prompt('🔐 Confirm YOUR Admin password:');
+  if(p===null)return false;
+  if(cur&&cur.role==='Admin'&&users.some(u=>u.id===cur.id&&u.password===p))return true;
+  alert('❌ Wrong password. Cancelled.');return false;
+}
 
-  if (!uVal || !pVal) {
-    alert('කරුණාකර Username සහ Password ඇතුළත් කරන්න.');
+/* ============ NAV ============ */
+function nav(page,btn){
+  document.querySelectorAll('aside button').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  pageTitle.textContent=btn?btn.textContent.slice(2):page;
+  const R={dashboard,cif:pgCIF,customers:pgCustomers,groups:pgGroups,products:pgProducts,loans:pgLoans,payments:pgPayments,duetoday:pgDue,ledger:pgLedger,collection:pgCollection,monthly:pgMonthly,profit:pgProfit,officer:pgOfficer,users:pgUsers,settings:pgSettings};
+  content.innerHTML=R[page]();
+}
+const navBtn=t=>[...document.querySelectorAll('aside button')].find(b=>b.textContent.includes(t));
+
+/* ============ DASHBOARD ============ */
+function dashboard(){
+  const act=loans.filter(l=>l.status==='active');
+  const out=act.reduce((s,l)=>s+(l.totalPayable-l.paid),0);
+  const col=payments.filter(p=>p.date===today()).reduce((s,p)=>s+p.amount,0);
+  const totArr=act.reduce((s,l)=>s+arrearsOf(l),0);
+  return `<div class="grid g4">
+    <div class="stat"><div class="v">${customers.length}</div><div class="l">Customers</div></div>
+    <div class="stat"><div class="v">${fmt(out)}</div><div class="l">Total Outstanding (${act.length} loans)</div></div>
+    <div class="stat red"><div class="v">${fmt(totArr)}</div><div class="l">⚠️ Total Arrears</div></div>
+    <div class="stat green"><div class="v">${fmt(col)}</div><div class="l">Today's Collection</div></div>
+  </div>
+  <div class="card" style="margin-top:18px"><h3 class="sec">Pending Loan Approvals</h3>${loanTable(loans.filter(l=>l.status==='pending'),'tblPend')}</div>`;
+}
+function arrearsOf(l){
+  let cumDue=0;const t=today();
+  l.schedule.forEach(r=>{if(r.date<=t)cumDue+=r.total});
+  return Math.max(0,cumDue-l.paid);
+}
+
+/* ============ CIF + DOCUMENTS ============ */
+function pgCIF(){
+  return `<div class="card"><h3 class="sec">CIF - Customer Information Search</h3>
+    <div class="grid g3"><div style="grid-column:span 2"><label>Search by NIC / Phone / Name / Customer No</label>
+    <input id="cifQ" placeholder="Type NIC, phone, name or CUS number..." oninput="cifSearch()"></div>
+    <div style="align-self:end"><button class="btn" onclick="cifSearch()">🔎 Search</button></div></div>
+    <div id="cifResults"></div></div>
+  <div id="cifProfile"></div>
+  <div class="card"><h3 class="sec">📋 All Customers Report (by Join Date)</h3>
+    <div class="grid g3">
+      <div><label>Joined From</label><input id="cifFrom" type="date"></div>
+      <div><label>Joined To</label><input id="cifTo" type="date" value="${today()}"></div>
+      <div style="align-self:end"><button class="btn" onclick="cifAllReport()">Generate</button></div>
+    </div><div id="cifAllOut"></div></div>`;
+}
+function cifSearch(){
+  const q=cifQ.value.trim().toLowerCase();const qn=normNic(q);
+  if(!q){cifResults.innerHTML='';return}
+  const hits=customers.filter(c=>
+    normNic(c.nic).includes(qn)||(c.no||'').toLowerCase().includes(q)||
+    (c.phone||'').replace(/\s/g,'').includes(q.replace(/\s/g,''))||
+    (c.full||'').toLowerCase().includes(q)||(c.other||'').toLowerCase().includes(q));
+  cifResults.innerHTML=`<table id="tblCif"><tr><th>Cust No</th><th>Name</th><th>NIC</th><th>Phone</th><th>Joined</th><th>Active Loans</th><th></th></tr>
+  ${hits.map(c=>{const ln=loans.filter(l=>l.customerId===c.id&&l.status!=='settled').length;
+  return `<tr><td><b>${esc(c.no)}</b></td><td><b>${esc(c.title)}. ${esc(c.full)}</b></td><td>${esc(c.nic)}</td><td>${esc(c.phone)}</td><td>${esc(c.joined)}</td>
+  <td>${ln?`<span class="badge b-active">${ln}</span>`:'<span class="badge b-settled">0</span>'}</td>
+  <td><button class="btn sm" onclick="viewCIF('${c.id}')">👁️ View CIF</button></td></tr>`}).join('')||'<tr><td colspan=7>❌ No customer found</td></tr>'}</table>`;
+}
+function cifAllReport(){
+  const f=cifFrom.value||'0000-01-01',t=cifTo.value||'9999-12-31';
+  const list=customers.filter(c=>(c.joined||'')>=f&&(c.joined||'')<=t).sort((a,b)=>(a.joined||'').localeCompare(b.joined||''));
+  cifAllOut.innerHTML=`<div style="text-align:right;margin:8px 0">${xlsBtn('tblCifAll','all-customers')}</div>
+  <table id="tblCifAll"><tr><th>Cust No</th><th>Join Date</th><th>Name</th><th>NIC</th><th>Phone</th><th>Group</th><th>Address</th><th>Active Loans</th><th>Outstanding</th></tr>
+  ${list.map(c=>{const g=groups.find(x=>x.id===c.group);
+    const cl=loans.filter(l=>l.customerId===c.id&&l.status==='active');
+    const out=cl.reduce((s,l)=>s+(l.totalPayable-l.paid),0);
+  return `<tr><td><b>${esc(c.no)}</b></td><td>${esc(c.joined)}</td><td>${esc(c.title)}. ${esc(c.full)}</td><td>${esc(c.nic)}</td><td>${esc(c.phone)}</td>
+  <td>${g?esc(g.name):'-'}</td><td>${esc(c.addr||'')}</td><td>${cl.length}</td><td>${fmt(out)}</td></tr>`}).join('')||'<tr><td colspan=9>No customers</td></tr>'}
+  <tr><td colspan=8 style="text-align:right"><b>TOTAL CUSTOMERS: ${list.length}</b></td><td></td></tr></table>`;
+}
+function viewCIF(id){
+  const c=customers.find(x=>x.id===id);if(!c)return;
+  const g=groups.find(x=>x.id===c.group);
+  const cLoans=loans.filter(l=>l.customerId===id);
+  const cPays=payments.filter(p=>cLoans.some(l=>l.id===p.loanId));
+  const totOut=cLoans.filter(l=>l.status==='active').reduce((s,l)=>s+(l.totalPayable-l.paid),0);
+  const totArr=cLoans.filter(l=>l.status==='active').reduce((s,l)=>s+arrearsOf(l),0);
+  const docs=c.docs||[];
+  const M={flat:'Flat',rb_rental:'RB-Rental',rb_capital:'RB-Capital',manual:'Manual'};
+  cifProfile.innerHTML=`
+  <div class="card"><div class="secrow"><h3>👤 ${esc(c.no)} — ${esc(c.title)}. ${esc(c.full)} ${esc(c.other||'')}</h3>
+  <div>Outstanding: <b style="color:var(--bad)">${fmt(totOut)}</b>${totArr>0?` &nbsp; Arrears: <b style="color:var(--bad)">${fmt(totArr)}</b>`:''}</div></div>
+  <div class="grid g2">
+    <div>
+      <div class="cifItem"><b>Customer No:</b> ${esc(c.no)}</div>
+      <div class="cifItem"><b>NIC:</b> ${esc(c.nic)}</div>
+      <div class="cifItem"><b>Phone:</b> ${esc(c.phone)}</div>
+      <div class="cifItem"><b>Email:</b> ${esc(c.email||'-')}</div>
+      <div class="cifItem"><b>Address:</b> ${esc(c.addr||'-')}</div>
+      <div class="cifItem"><b>Location:</b> ${c.map?`<a href="${esc(c.map)}" target="_blank">📍 Open Google Map</a>`:'-'}</div>
+    </div>
+    <div>
+      <div class="cifItem"><b>Join Date:</b> ${esc(c.joined)}</div>
+      <div class="cifItem"><b>Group:</b> ${g?esc(g.name):'-'}</div>
+      <div class="cifItem"><b>Date of Birth:</b> ${esc(c.dob||'-')}</div>
+      <div class="cifItem"><b>Gender:</b> ${esc(c.gender||'-')}</div>
+      <div class="cifItem"><b>Marital Status:</b> ${esc(c.marital||'-')}</div>
+    </div>
+  </div></div>
+  <div class="card"><div class="secrow"><h3>💰 Loans (${cLoans.length})</h3>${xlsBtn('tblCifLoans','cif-loans-'+c.no)}</div>
+  <table id="tblCifLoans"><tr><th>Loan No</th><th>Amount</th><th>Type</th><th>Method</th><th>Payable</th><th>Paid</th><th>Balance</th><th>Arrears</th><th>Next Due</th><th>Status</th><th></th></tr>
+  ${cLoans.map(l=>{const nd=l.status==='active'?nextDue(l):null;const ar=l.status==='active'?arrearsOf(l):0;
+  return `<tr><td><b>${l.no}</b></td><td>${fmt(l.amount)}</td><td>${l.type}</td><td>${M[l.method]}</td><td>${fmt(l.totalPayable)}</td>
+  <td>${fmt(l.paid)}</td><td>${fmt(l.totalPayable-l.paid)}</td><td>${ar>0?`<b style="color:var(--bad)">${fmt(ar)}</b>`:'-'}</td><td>${nd?nd.date:'-'}</td>
+  <td><span class="badge b-${l.status}">${l.status.toUpperCase()}</span></td>
+  <td><button class="btn sm" onclick="printLoanReport('${l.id}')">📄 Report</button></td></tr>`}).join('')||'<tr><td colspan=11>No loans</td></tr>'}</table></div>
+  <div class="card"><div class="secrow"><h3>📎 Documents (${docs.length})</h3>
+    <input type="file" accept="image/*,.pdf" style="width:auto;margin:0" onchange="upDoc('${c.id}',this)"></div>
+    <table><tr><th>Document</th><th>Type</th><th>Uploaded</th><th>By</th><th>Actions</th></tr>
+    ${docs.map(d=>`<tr><td><b>${esc(d.name)}</b></td><td>${(d.type||'').startsWith('image')?'🖼️ Image':'📄 PDF'}</td><td>${d.date}</td><td>${esc(d.by||'')}</td>
+    <td><button class="btn sm" onclick="openDoc('${c.id}','${d.id}')">👁️ View</button>
+    ${isAdmin()?`<button class="btn red sm" onclick="delDoc('${c.id}','${d.id}')">🗑️</button>`:''}</td></tr>`).join('')||'<tr><td colspan=5>No documents. NIC copy, photos upload karanna (max 800KB).</td></tr>'}</table></div>
+  <div class="card"><div class="secrow"><h3>🧾 Payment History (${cPays.length})</h3>${xlsBtn('tblCifPays','cif-payments-'+c.no)}</div>
+  <table id="tblCifPays"><tr><th>Receipt</th><th>Date</th><th>Loan</th><th>Amount</th><th>Method</th><th>Remark</th><th>By</th></tr>
+  ${cPays.slice().reverse().map(p=>{const l=loans.find(x=>x.id===p.loanId);
+  return `<tr><td>${p.receiptNo}</td><td>${p.date}</td><td>${l?l.no:''}</td><td>${fmt(p.amount)}</td><td>${esc(p.method||'Cash')}</td><td>${esc(p.remark||'')}</td><td>${esc(p.by)}</td></tr>`}).join('')||'<tr><td colspan=7>No payments</td></tr>'}</table></div>`;
+  cifProfile.scrollIntoView({behavior:'smooth'});
+}
+function upDoc(cid,inp){
+  const f=inp.files[0];if(!f)return;
+  if(f.size>800*1024)return alert('❌ File too big! Max 800KB.');
+  const r=new FileReader();
+  r.onload=e=>{
+    const c=customers.find(x=>x.id===cid);if(!c)return;
+    c.docs=c.docs||[];
+    c.docs.push({id:uid(),name:f.name,type:f.type,data:e.target.result,date:today(),by:cur.name});
+    try{save()}catch(err){c.docs.pop();return alert('❌ Storage full! Delete old documents.')}
+    alert('✅ Document uploaded!');viewCIF(cid);
+  };
+  r.readAsDataURL(f);
+}
+function openDoc(cid,did){
+  const c=customers.find(x=>x.id===cid);const d=c&&(c.docs||[]).find(x=>x.id===did);if(!d)return;
+  const w=window.open('','_blank');
+  w.document.write('<title>'+esc(d.name)+'</title>'+((d.type||'').startsWith('image')
+    ?'<img src="'+d.data+'" style="max-width:100%">'
+    :'<iframe src="'+d.data+'" style="width:100%;height:98vh;border:none"></iframe>'));
+}
+function delDoc(cid,did){
+  if(!isAdmin())return alert('❌ Only Admin can delete documents');
+  if(!confirm('Delete this document?'))return;
+  const c=customers.find(x=>x.id===cid);if(!c)return;
+  c.docs=(c.docs||[]).filter(x=>x.id!==did);
+  save();viewCIF(cid);
+}
+/* ======== PART 1 END - PART 2 MEKATA YATIN PASTE KARANNA ======== */
+/* ============ GROUPS ============ */
+function pgGroups(){
+  return `<div class="card"><h3 class="sec">Create Group</h3>
+    <div class="grid g3"><div><label>Group Name</label><input id="grName"></div>
+    <div><label>Description</label><input id="grDesc"></div>
+    <div style="align-self:end"><button class="btn" onclick="addGroup()">+ Add Group</button></div></div></div>
+  <div class="card"><div class="secrow"><h3>Groups</h3>${xlsBtn('tblGroups','groups')}</div>
+  <table id="tblGroups"><tr><th>Name</th><th>Description</th><th>Members</th><th></th></tr>
+  ${groups.map(g=>`<tr><td><b>${esc(g.name)}</b></td><td>${esc(g.desc)}</td><td>${customers.filter(c=>c.group===g.id).length}</td>
+  <td>${isAdmin()?`<button class="btn red sm" onclick="delGroup('${g.id}')">🗑️ Delete</button>`:''}</td></tr>`).join('')||'<tr><td colspan=4>No groups</td></tr>'}</table></div>`;
+}
+function addGroup(){if(!grName.value.trim())return alert('Enter name');groups.push({id:uid(),name:grName.value.trim(),desc:grDesc.value});save();nav('groups',navBtn('Groups'))}
+function delGroup(id){
+  if(!isAdmin())return alert('❌ Only Admin can delete');
+  const g=groups.find(x=>x.id===id);if(!g)return;
+  const mc=customers.filter(c=>c.group===id).length;
+  if(!confirm('Delete group "'+g.name+'"?'+(mc?'\n('+mc+' customers unlink wenawa)':'')))return;
+  customers.forEach(c=>{if(c.group===id)c.group=''});
+  groups=groups.filter(x=>x.id!==id);
+  save();nav('groups',navBtn('Groups'));
+}
+
+/* ============ CUSTOMERS ============ */
+function pgCustomers(){
+  return `<div class="card"><h3 class="sec">Create Customer (Next No: <b>${nextCustNo()}</b>)</h3><div class="grid g4">
+    <div><label>Group</label><select id="cGroup"><option value="">-- None --</option>${groups.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('')}</select></div>
+    <div><label>Title</label><select id="cTitle"><option>Mr</option><option>Mrs</option><option>Miss</option><option>Rev</option><option>Dr</option></select></div>
+    <div><label>Full Name *</label><input id="cFull"></div>
+    <div><label>Other Names</label><input id="cOther"></div>
+    <div><label>NIC *</label><input id="cNic" oninput="nicCheck()"><div id="nicWarn" style="color:var(--bad);font-size:12px;margin-top:-6px;margin-bottom:8px"></div></div>
+    <div><label>Phone No *</label><input id="cPhone"></div>
+    <div><label>Email</label><input id="cEmail" type="email"></div>
+    <div><label>Location (Google Map link)</label><input id="cMap" placeholder="https://maps.google.com/..."></div>
+    <div><label>Address</label><input id="cAddr"></div>
+    <div><label>Date of Birth</label><input id="cDob" type="date"></div>
+    <div><label>Gender</label><select id="cGender"><option>Male</option><option>Female</option></select></div>
+    <div><label>Marital Status</label><select id="cMar"><option>Single</option><option>Married</option><option>Divorced</option><option>Widowed</option></select></div>
+    </div><button class="btn green" onclick="addCustomer()">+ Save Customer</button></div>
+  <div class="card"><div class="secrow"><h3>Customers (${customers.length})</h3>${xlsBtn('tblCust','customers')}</div>
+  <table id="tblCust"><tr><th>Cust No</th><th>Name</th><th>NIC</th><th>Phone</th><th>Group</th><th>Joined</th><th>Map</th><th>Loans</th><th></th></tr>
+  ${customers.map(c=>{const g=groups.find(x=>x.id===c.group);const ln=loans.filter(l=>l.customerId===c.id&&l.status!=='settled').length;
+   return `<tr><td><b>${esc(c.no)}</b></td><td><b>${esc(c.title)}. ${esc(c.full)}</b><br><small>${esc(c.email)}</small></td><td>${esc(c.nic)}</td><td>${esc(c.phone)}</td>
+   <td>${g?esc(g.name):'-'}</td><td>${esc(c.joined)}</td><td>${c.map?`<a href="${esc(c.map)}" target="_blank">📍 Map</a>`:'-'}</td>
+   <td>${ln?`<span class="badge b-active">${ln} active</span>`:'<span class="badge b-settled">clear</span>'}</td>
+   <td>${isAdmin()?`<button class="btn red sm" onclick="delCustomer('${c.id}')">🗑️ Delete</button>`:''}</td></tr>`}).join('')||'<tr><td colspan=9>No customers</td></tr>'}</table></div>`;
+}
+function nicCheck(){
+  const dup=customers.find(c=>normNic(c.nic)===normNic(cNic.value)&&cNic.value.trim());
+  nicWarn.textContent=dup?'⚠️ NIC already registered to: '+dup.full+' ('+dup.no+')':'';
+}
+function addCustomer(){
+  if(!cFull.value.trim()||!cNic.value.trim()||!cPhone.value.trim())return alert('Full name, NIC & Phone are required');
+  const dup=customers.find(c=>normNic(c.nic)===normNic(cNic.value));
+  if(dup)return alert('❌ DUPLICATE NIC! Already registered to: '+dup.full+' ('+dup.no+')');
+  customers.push({id:uid(),no:nextCustNo(),joined:today(),group:cGroup.value,title:cTitle.value,full:cFull.value.trim(),other:cOther.value,nic:normNic(cNic.value),
+    phone:cPhone.value.trim(),email:cEmail.value,map:cMap.value,addr:cAddr.value,dob:cDob.value,gender:cGender.value,marital:cMar.value});
+  save();nav('customers',navBtn('Customers'));
+}
+function delCustomer(id){
+  if(!isAdmin())return alert('❌ Only Admin can delete');
+  const c=customers.find(x=>x.id===id);if(!c)return;
+  const cl=loans.filter(l=>l.customerId===id);
+  let msg='Delete customer '+c.no+' - '+c.full+' permanently?';
+  if(cl.length)msg+='\n\n⚠️ This will ALSO DELETE '+cl.length+' loan(s) and all payments!';
+  if(cl.some(l=>l.status!=='settled'))msg+='\n🔴 WARNING: has UNSETTLED loans!';
+  if(!confirm(msg))return;
+  if(!adminPassOK())return;
+  const lids=cl.map(l=>l.id);
+  payments=payments.filter(p=>!lids.includes(p.loanId));
+  loans=loans.filter(l=>l.customerId!==id);
+  customers=customers.filter(x=>x.id!==id);
+  save();alert('🗑️ Deleted.');nav('customers',navBtn('Customers'));
+}
+
+/* ============ PRODUCTS ============ */
+function pgProducts(){
+  return `<div class="card"><h3 class="sec">Create Loan Product</h3>
+    <p style="font-size:12px;color:#64748b;margin-bottom:10px">💡 Example: 200,000 loan, <b>10% per month</b>, 6 months flat → interest 120,000, total 320,000 → monthly 53,333.33 / weekly 13,333.33</p>
+    <div class="grid g4">
+    <div><label>Product Name *</label><input id="pName"></div>
+    <div><label>Product Code *</label><input id="pCode"></div>
+    <div><label>Interest Rate (% per MONTH) *</label><input id="pRate" type="number" step="0.01"></div>
+    <div><label>Term (Months) *</label><input id="pTerm" type="number"></div>
+    <div><label>Document Charge (% of loan)</label><input id="pDoc" type="number" step="0.01" value="0"></div>
+    <div><label>Other Charges (Rs.)</label><input id="pOther" type="number" value="0"></div>
+    </div><button class="btn green" onclick="addProduct()">+ Save Product</button></div>
+  <div class="card"><div class="secrow"><h3>Loan Products</h3>${xlsBtn('tblProd','loan-products')}</div>
+  <table id="tblProd"><tr><th>Code</th><th>Name</th><th>Rate %/month</th><th>Term (Months)</th><th>Doc Charge %</th><th>Other Rs.</th><th></th></tr>
+  ${products.map(p=>`<tr><td><b>${esc(p.code)}</b></td><td>${esc(p.name)}</td><td>${p.rate}%</td><td>${p.term}</td><td>${p.doc}%</td><td>${fmt(p.other)}</td>
+  <td>${isAdmin()?`<button class="btn red sm" onclick="delProduct('${p.id}')">🗑️ Delete</button>`:''}</td></tr>`).join('')||'<tr><td colspan=7>No products</td></tr>'}</table></div>`;
+}
+function addProduct(){
+  if(!pName.value||!pCode.value||!pRate.value||!pTerm.value)return alert('Fill required fields');
+  products.push({id:uid(),name:pName.value,code:pCode.value,rate:+pRate.value,term:+pTerm.value,doc:+pDoc.value||0,other:+pOther.value||0});
+  save();nav('products',navBtn('Products'));
+}
+function delProduct(id){
+  if(!isAdmin())return alert('❌ Only Admin can delete');
+  const p=products.find(x=>x.id===id);if(!p)return;
+  const uc=loans.filter(l=>l.productId===id).length;
+  if(!confirm('Delete product "'+p.name+'"?'+(uc?'\n⚠️ '+uc+' loan(s) used it (loans NOT deleted).':'')))return;
+  products=products.filter(x=>x.id!==id);
+  save();nav('products',navBtn('Products'));
+}
+
+/* ============ LOAN CALC (% per month + weekly day) ============ */
+function addPeriod(d,type){const x=new Date(d);if(type==='daily')x.setDate(x.getDate()+1);else if(type==='weekly')x.setDate(x.getDate()+7);else x.setMonth(x.getMonth()+1);return x.toISOString().slice(0,10)}
+function installmentsFor(months,type){return type==='daily'?months*30:type==='weekly'?months*4:months}
+function buildSchedule(P,monthlyRate,n,type,method,stream,start,months,weekDay){
+  const perYear=type==='daily'?365:type==='weekly'?52:12;
+  const wd=(weekDay===''||weekDay==null)?null:+weekDay;
+  const step=d=>{
+    if(type==='weekly'&&wd!==null){const x=new Date(d);do{x.setDate(x.getDate()+1)}while(x.getDay()!==wd);return x.toISOString().slice(0,10)}
+    return addPeriod(d,type);
+  };
+  let rows=[],d=start,bal=P;
+  if(method==='flat'){
+    const totInt=P*(monthlyRate/100)*months;
+    for(let k=1;k<=n;k++){d=step(d);let cap=0,int=0;
+      if(stream==='Regular'){cap=P/n;int=totInt/n}
+      else if(stream==='Interest'){int=totInt/n;cap=(k===n)?P:0}
+      else{cap=P/n;int=(k===n)?totInt:0}
+      rows.push({no:k,date:d,cap,int,total:cap+int});}
+  }else{
+    const i=(monthlyRate/100)*12/perYear;
+    if(method==='rb_rental'){
+      const pmt=i===0?P/n:P*i/(1-Math.pow(1+i,-n));
+      for(let k=1;k<=n;k++){d=step(d);const int=bal*i;const cap=(k===n)?bal:pmt-int;bal-=cap;rows.push({no:k,date:d,cap,int,total:cap+int});}
+    }else{
+      const cap=P/n;
+      for(let k=1;k<=n;k++){d=step(d);const int=bal*i;bal-=cap;rows.push({no:k,date:d,cap,int,total:cap+int});}
+    }
+  }
+  return rows;
+}
+
+/* ============ GUARANTORS (mandatory, from customers) ============ */
+function gBox(n){
+  return `<div class="card" style="background:#fff7ed;border:2px solid #d97706;margin-bottom:0">
+  <b style="color:#92400e">🤝 Guarantor ${n} * (අනිවාර්යයි)</b>
+  <div style="margin-top:8px">
+    <select id="g${n}Sel" onchange="gInfo(${n})">
+      <option value="">-- SELECT GUARANTOR ${n} --</option>
+      ${customers.map(c=>`<option value="${c.id}">${esc(c.no)} - ${esc(c.full)} (${esc(c.nic)})</option>`).join('')}
+    </select>
+    <div id="g${n}Info" style="font-size:12px;color:#475569"></div>
+  </div></div>`;
+}
+function gInfo(n){
+  const el=document.getElementById('g'+n+'Info');
+  const c=customers.find(x=>x.id===document.getElementById('g'+n+'Sel').value);
+  el.innerHTML=c?`✅ <b>${esc(c.full)}</b> | NIC: ${esc(c.nic)} | 📞 ${esc(c.phone)}`:'';
+}
+function getGuarantors(){
+  const g1=document.getElementById('g1Sel'),g2=document.getElementById('g2Sel');
+  const c1=customers.find(x=>x.id===(g1?g1.value:''));
+  const c2=customers.find(x=>x.id===(g2?g2.value:''));
+  if(!c1||!c2){alert('❌ GUARANTORS 2ක්ම අනිවාර්යයි! Customers list eken thoranna.');return null}
+  if(c1.id===c2.id){alert('❌ Guarantor 1 saha 2 ekama kenek wenna behe!');return null}
+  const borrower=document.getElementById('lCust').value;
+  if(c1.id===borrower||c2.id===borrower){alert('❌ Naya ganna kenama guarantor wenna behe!');return null}
+  return [c1,c2].map(c=>({custId:c.id,custNo:c.no,name:c.title+'. '+c.full,nic:c.nic,phone:c.phone,addr:c.addr||''}));
+}
+
+/* ============ LOANS ============ */
+function prodOpts(filter){
+  const q=(filter||'').toLowerCase();
+  const list=products.filter(p=>!q||(p.name||'').toLowerCase().includes(q)||(p.code||'').toLowerCase().includes(q));
+  return `<option value="manual">✍️ MANUAL (enter details yourself)</option>`+
+    list.map(p=>`<option value="${p.id}">${esc(p.code)} - ${esc(p.name)} (${p.rate}%/m)</option>`).join('');
+}
+function pgLoans(){
+  return `<div class="card"><h3 class="sec">Create Loan</h3><div class="grid g4">
+    <div><label>Customer *</label><select id="lCust">${customers.map(c=>`<option value="${c.id}">${esc(c.no)} - ${esc(c.full)} (${esc(c.nic)})</option>`).join('')}</select></div>
+    <div><label>🔎 Search Product</label><input id="lProdSearch" placeholder="Type to search..." oninput="filterProd()"></div>
+    <div><label>Loan Product *</label><select id="lProd" onchange="prodPick()">${prodOpts('')}</select></div>
+    <div><label>Loan Amount (Rs.) *</label><input id="lAmt" type="number" oninput="prodPick()"></div>
+    <div><label>Interest Rate (% per MONTH)</label><input id="lRate" type="number" step="0.01"></div>
+    <div><label>Term (Months)</label><input id="lTermM" type="number" oninput="calcInst()"></div>
+    <div><label>Repayment Type *</label><select id="lType" onchange="calcInst();typePick()"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>
+    <div id="weekDayBox" style="display:none"><label>📅 Weekly Payment Day *</label><select id="lWeekDay">
+      <option value="1">Monday (සඳුදා)</option><option value="2">Tuesday (අඟහරුවාදා)</option><option value="3">Wednesday (බදාදා)</option>
+      <option value="4">Thursday (බ්‍රහස්පතින්දා)</option><option value="5">Friday (සිකුරාදා)</option><option value="6">Saturday (සෙනසුරාදා)</option><option value="0">Sunday (ඉරිදා)</option></select></div>
+    <div><label>No. of Installments (auto)</label><input id="lInst" readonly style="background:#f1f5f9"></div>
+    <div><label>Interest Calculation Method *</label><select id="lMethod" onchange="methodPick()">
+      <option value="flat">Flat rate</option><option value="rb_rental">Reducing balance - Equal rental</option><option value="rb_capital">Reducing balance - Equal capital</option></select></div>
+    <div id="streamBox"><label>Repayment Stream</label><select id="lStream"><option>Regular</option><option>Interest</option><option>Capital</option></select></div>
+    <div id="manDocBox"><label>Document Charge (%) - manual</label><input id="mDoc" type="number" step="0.01" value="0" oninput="prodPick()"></div>
+    <div id="manOtherBox"><label>Other Charges (Rs.) - manual</label><input id="mOther" type="number" value="0" oninput="prodPick()"></div>
+    <div><label>Start / Issue Date</label><input id="lStart" type="date" value="${today()}"></div>
+    </div>
+    <div class="grid g2" style="margin-bottom:12px">${gBox(1)}${gBox(2)}</div>
+    <div id="chargeInfo" style="color:#475569;font-size:13px;margin-bottom:10px"></div>
+    <button class="btn orange" onclick="previewLoan()">👁️ Preview</button>
+    <button class="btn green" onclick="addLoan()">+ Create Loan (Pending Approval)</button></div>
+  <div id="prevView"></div>
+  <div class="card"><div class="secrow"><h3>All Loans</h3>${xlsBtn('tblLoans','loans')}</div>${loanTable(loans,'tblLoans')}</div>
+  <div id="schedView"></div>`;
+}
+function typePick(){weekDayBox.style.display=lType.value==='weekly'?'':'none'}
+function filterProd(){lProd.innerHTML=prodOpts(lProdSearch.value.trim());prodPick()}
+function isManual(){return lProd.value==='manual'}
+function prodPick(){
+  const man=isManual();
+  manDocBox.style.display=man?'':'none';manOtherBox.style.display=man?'':'none';
+  const P=+lAmt.value||0;
+  if(man){
+    chargeInfo.innerHTML=P?`✍️ Manual: Doc Charge <b>${fmt(P*(+mDoc.value||0)/100)}</b> | Other <b>${fmt(+mOther.value||0)}</b>`:'✍️ Manual mode';
     return;
   }
+  const p=products.find(x=>x.id===lProd.value);if(!p)return;
+  lRate.value=p.rate;lTermM.value=p.term;calcInst();
+  chargeInfo.innerHTML=P?`Document Charge: <b>${fmt(P*p.doc/100)}</b> (${p.doc}%) | Other: <b>${fmt(p.other)}</b>`:'';
+}
+function calcInst(){if(lTermM.value)lInst.value=installmentsFor(+lTermM.value,lType.value)}
+function methodPick(){streamBox.style.display=lMethod.value==='flat'?'':'none'}
+function getLoanInputs(){
+  const P=+lAmt.value,rate=+lRate.value,months=+lTermM.value;
+  if(!P||!rate||!months){alert('Enter amount, rate & term');return null}
+  const n=installmentsFor(months,lType.value);
+  let docPct,other;
+  if(isManual()){docPct=+mDoc.value||0;other=+mOther.value||0}
+  else{const p=products.find(x=>x.id===lProd.value);if(!p){alert('Select a product or Manual');return null}docPct=p.doc;other=p.other}
+  const weekDay=lType.value==='weekly'?lWeekDay.value:'';
+  return {P,rate,months,n,docPct,other,weekDay};
+}
+function previewLoan(){
+  const v=getLoanInputs();if(!v)return;
+  const c=customers.find(x=>x.id===lCust.value);
+  const sched=buildSchedule(v.P,v.rate,v.n,lType.value,lMethod.value,lStream.value,lStart.value,v.months,v.weekDay);
+  const totalPayable=sched.reduce((s,r)=>s+r.total,0);
+  const totInt=totalPayable-v.P;
+  const inst=sched[0]?sched[0].total:0;
+  const dayTxt=(lType.value==='weekly')?' (every '+DAYS[+v.weekDay]+')':'';
+  prevView.innerHTML=`<div class="card"><div class="secrow"><h3>👁️ LOAN PREVIEW — ${c?esc(c.full):''}</h3>${xlsBtn('tblPrev','loan-preview')}</div>
+  <div class="pvBox">
+    <div class="row"><span>Loan Amount</span><b>${fmt(v.P)}</b></div>
+    <div class="row"><span>Interest Rate</span><b>${v.rate}% per month × ${v.months} months</b></div>
+    <div class="row"><span>Total Interest</span><b style="color:var(--warn)">${fmt(totInt)}</b></div>
+    <div class="row"><span>TOTAL PAYABLE</span><b class="big">${fmt(totalPayable)}</b></div>
+    <div class="row"><span>Repayment: ${v.n} × ${lType.value}${dayTxt}</span><b class="big" style="color:var(--ok)">${fmt(inst)}</b></div>
+    <div class="row"><span>Document Charge (${v.docPct}%)</span><b>${fmt(v.P*v.docPct/100)}</b></div>
+    <div class="row"><span>Other Charges</span><b>${fmt(v.other)}</b></div>
+    <div class="row"><span>First Due</span><b>${sched[0]?sched[0].date:'-'}</b></div>
+    <div class="row"><span>Last Due</span><b>${sched[sched.length-1]?sched[sched.length-1].date:'-'}</b></div>
+  </div>
+  <table id="tblPrev"><tr><th>#</th><th>Due Date</th><th>Capital</th><th>Interest</th><th>Installment</th></tr>
+  ${sched.map(r=>`<tr><td>${r.no}</td><td>${r.date} (${DAYS[new Date(r.date).getDay()].slice(0,3)})</td><td>${fmt(r.cap)}</td><td>${fmt(r.int)}</td><td><b>${fmt(r.total)}</b></td></tr>`).join('')}
+  <tr><td colspan=2 style="text-align:right"><b>TOTAL</b></td><td><b>${fmt(v.P)}</b></td><td><b>${fmt(totInt)}</b></td><td><b>${fmt(totalPayable)}</b></td></tr></table>
+  <button class="btn green" style="margin-top:12px" onclick="addLoan()">✅ Confirm & Create Loan</button>
+  <button class="btn gray" style="margin-top:12px" onclick="prevView.innerHTML=''">✖ Close</button></div>`;
+  prevView.scrollIntoView({behavior:'smooth'});
+}
+function addLoan(){
+  if(customers.length<3)return alert('❌ Guarantors 2k oni nisa customers 3k wath (naya ganna kena + guarantors 2) system eke inna one!');
+  const v=getLoanInputs();if(!v)return;
+  const gu=getGuarantors();if(!gu)return;
+  const sched=buildSchedule(v.P,v.rate,v.n,lType.value,lMethod.value,lStream.value,lStart.value,v.months,v.weekDay);
+  const totalPayable=sched.reduce((s,r)=>s+r.total,0);
+  const newId=uid();
+  loans.push({id:newId,no:'LN'+String(loans.length+1).padStart(4,'0'),customerId:lCust.value,productId:isManual()?'manual':lProd.value,amount:v.P,rate:v.rate,n:v.n,months:v.months,
+    type:lType.value,weekDay:v.weekDay,method:lMethod.value,stream:lMethod.value==='flat'?lStream.value:'-',start:lStart.value,
+    docCharge:v.P*v.docPct/100,otherCharge:v.other,guarantors:gu,
+    schedule:sched,totalPayable,paid:0,status:'pending',createdBy:cur.name});
+  save();
+  if(confirm('✅ Loan created!\n\nPrint LOAN DETAIL REPORT? (PDF)'))printLoanReport(newId);
+  if(confirm('📱 Send loan report via WhatsApp?'))waLoanReport(newId);
+  nav('loans',navBtn('Loans'));
+}
+function loanTable(list,tid){
+  const M={flat:'Flat',rb_rental:'RB-Rental',rb_capital:'RB-Capital'};
+  return `<table id="${tid}"><tr><th>Loan No</th><th>Cust No</th><th>Customer</th><th>Amount</th><th>Type</th><th>Payable</th><th>Paid</th><th>Balance</th><th>Arrears</th><th>Status</th><th>Actions</th></tr>
+  ${list.map(l=>{const c=customers.find(x=>x.id===l.customerId);const ar=l.status==='active'?arrearsOf(l):0;
+   const dayTxt=(l.type==='weekly'&&l.weekDay!=null&&l.weekDay!=='')?'<br><small>'+DAYS[+l.weekDay]+'</small>':'';
+   return `<tr><td><b>${l.no}</b></td><td>${c?esc(c.no):''}</td><td>${c?esc(c.full):'?'}</td><td>${fmt(l.amount)}</td><td>${l.type}${dayTxt}</td>
+   <td>${fmt(l.totalPayable)}</td><td>${fmt(l.paid)}</td><td>${fmt(l.totalPayable-l.paid)}</td>
+   <td>${ar>0?`<b style="color:var(--bad)">${fmt(ar)}</b>`:'-'}</td>
+   <td><span class="badge b-${l.status}">${l.status.toUpperCase()}</span></td>
+   <td>${l.status==='pending'?`<button class="btn green sm" onclick="approveLoan('${l.id}')">Approve</button>`:''}
+   ${l.status==='active'?`<button class="btn green sm" onclick="goPay('${l.id}')">💰 Pay</button>`:''}
+   <button class="btn sm" onclick="printLoanReport('${l.id}')">📄</button>
+   <button class="btn sm xl" onclick="waLoanReport('${l.id}')">📱</button>
+   <button class="btn sm gray" onclick="viewSched('${l.id}')">📋</button>
+   ${isAdmin()?`<button class="btn red sm" onclick="delLoan('${l.id}')">🗑️</button>`:''}</td></tr>`}).join('')||'<tr><td colspan=11>No loans</td></tr>'}</table>`;
+}
+function delLoan(id){
+  if(!isAdmin())return alert('❌ Only Admin can delete');
+  const l=loans.find(x=>x.id===id);if(!l)return;
+  const pc=payments.filter(p=>p.loanId===id).length;
+  if(!confirm('Delete loan '+l.no+'?'+(pc?'\n⚠️ Also deletes '+pc+' receipt(s)!':'')))return;
+  if(!adminPassOK())return;
+  payments=payments.filter(p=>p.loanId!==id);
+  loans=loans.filter(x=>x.id!==id);
+  save();alert('🗑️ Deleted.');nav('loans',navBtn('Loans'));
+}
+function approveLoan(id){
+  const l=loans.find(x=>x.id===id);
+  if((cur.limit||0)<l.amount)return alert(`❌ Your approval limit is ${fmt(cur.limit||0)}. This loan (${fmt(l.amount)}) exceeds it.`);
+  l.status='active';l.approvedBy=cur.name;save();alert('✅ Approved by '+cur.name);nav('loans',navBtn('Loans'));
+}
+function viewSched(id){
+  const l=loans.find(x=>x.id===id);const c=customers.find(x=>x.id===l.customerId);
+  let cum=0;
+  const rows=l.schedule.map(r=>{cum+=r.total;const paid=l.paid>=cum;
+    return `<tr><td>${r.no}</td><td>${r.date} (${DAYS[new Date(r.date).getDay()].slice(0,3)})</td><td>${fmt(r.cap)}</td><td>${fmt(r.int)}</td><td>${fmt(r.total)}</td>
+    <td>${paid?'<span class="badge b-settled">PAID</span>':(r.date<today()?'<span class="badge b-over">OVERDUE</span>':'<span class="badge b-pending">DUE</span>')}</td></tr>`}).join('');
+  const el=document.getElementById('schedView')||content;
+  el.innerHTML=`<div class="card"><div class="secrow"><h3>Schedule — ${l.no} — ${c?esc(c.full):''}</h3>${xlsBtn('tblSched','schedule-'+l.no)}</div>
+  <table id="tblSched"><tr><th>#</th><th>Due Date</th><th>Capital</th><th>Interest</th><th>Installment</th><th>Status</th></tr>${rows}</table></div>`;
+  el.scrollIntoView({behavior:'smooth'});
+}
 
-  dbRef.ref('users').orderByChild('username').equalTo(uVal).once('value', snapshot => {
-    if (snapshot.exists()) {
-      let userData = null;
-      snapshot.forEach(childSnap => {
-        const user = childSnap.val();
-        if (user.password === pVal) {
-          userData = user;
-        }
-      });
+/* ============ LOAN REPORT (with guarantors) ============ */
+function printLoanReport(id){
+  const l=loans.find(x=>x.id===id);if(!l)return;
+  const c=customers.find(x=>x.id===l.customerId);
+  const g=c&&groups.find(x=>x.id===c.group);
+  const M={flat:'Flat rate',rb_rental:'Reducing balance - Equal rental',rb_capital:'Reducing balance - Equal capital',manual:'Manual'};
+  const totInt=l.totalPayable-l.amount;
+  const inst=l.schedule[0]?l.schedule[0].total:0;
+  const dayTxt=(l.type==='weekly'&&l.weekDay!=null&&l.weekDay!=='')?' — every '+DAYS[+l.weekDay]:'';
+  const gu=l.guarantors||[];
+  const guHtml=gu.length?`<h3 style="color:#1e3a8a;margin:14px 0 6px">GUARANTORS</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <tr style="background:#e2e8f0"><th style="border:1px solid #cbd5e1;padding:4px">#</th><th style="border:1px solid #cbd5e1;padding:4px">Cust No</th><th style="border:1px solid #cbd5e1;padding:4px">Name</th><th style="border:1px solid #cbd5e1;padding:4px">NIC</th><th style="border:1px solid #cbd5e1;padding:4px">Phone</th><th style="border:1px solid #cbd5e1;padding:4px">Address</th></tr>
+    ${gu.map((x,i)=>`<tr><td style="border:1px solid #cbd5e1;padding:4px">${i+1}</td><td style="border:1px solid #cbd5e1;padding:4px">${esc(x.custNo||'')}</td><td style="border:1px solid #cbd5e1;padding:4px"><b>${esc(x.name)}</b></td><td style="border:1px solid #cbd5e1;padding:4px">${esc(x.nic)}</td><td style="border:1px solid #cbd5e1;padding:4px">${esc(x.phone)}</td><td style="border:1px solid #cbd5e1;padding:4px">${esc(x.addr)}</td></tr>`).join('')}</table>`:'';
+  const guSign=gu.map((x,i)=>`<td style="text-align:center">_______________________<br>Guarantor ${i+1}<br>(${esc(x.name)})</td>`).join('');
+  receiptArea.innerHTML=`<div style="max-width:720px;margin:auto;padding:24px;font-size:13px">
+    <div style="text-align:center;border-bottom:3px solid #1e3a8a;padding-bottom:12px">
+      ${settings.logo?`<img src="${settings.logo}" style="max-height:80px">`:''}
+      <h1 style="color:#1e3a8a;font-size:22px">${esc(settings.company)}</h1>
+      <div style="font-size:12px;color:#555">${esc(settings.address)}${settings.phone?' | Tel: '+esc(settings.phone):''}</div>
+      <h2 style="margin-top:10px;font-size:16px;letter-spacing:2px">LOAN DETAILS REPORT</h2>
+    </div>
+    <table style="width:100%;margin-top:14px;font-size:13px"><tr>
+      <td style="width:50%;vertical-align:top"><b style="color:#1e3a8a">CUSTOMER DETAILS</b><br>
+        Customer No: <b>${esc(c?c.no:'')}</b><br>Name: <b>${esc(c?c.title+'. '+c.full:'')}</b><br>
+        NIC: ${esc(c?c.nic:'')}<br>Phone: ${esc(c?c.phone:'')}<br>
+        Address: ${esc(c?c.addr||'-':'')}<br>Group: ${g?esc(g.name):'-'}</td>
+      <td style="width:50%;vertical-align:top"><b style="color:#1e3a8a">LOAN DETAILS</b><br>
+        Loan No: <b>${l.no}</b><br>Issue Date: ${l.start}<br>
+        Repayment: <b>${l.type.toUpperCase()}${dayTxt}</b><br>(${l.n} installments / ${l.months} months)<br>
+        Method: ${M[l.method]} ${l.stream!=='-'?'('+l.stream+')':''}<br>
+        Interest Rate: <b>${l.rate}% per month</b><br>Officer: ${esc(l.createdBy||'')}</td>
+    </tr></table>
+    <table style="width:100%;margin-top:14px;border:2px solid #1e3a8a;font-size:14px">
+      <tr style="background:#eff6ff"><td style="padding:6px">Loan Amount</td><td style="text-align:right;padding:6px"><b>${fmt(l.amount)}</b></td></tr>
+      <tr><td style="padding:6px">Total Interest</td><td style="text-align:right;padding:6px">${fmt(totInt)}</td></tr>
+      <tr style="background:#eff6ff"><td style="padding:6px"><b>TOTAL PAYABLE</b></td><td style="text-align:right;padding:6px"><b style="font-size:16px">${fmt(l.totalPayable)}</b></td></tr>
+      <tr><td style="padding:6px"><b>Installment (${l.type}${dayTxt})</b></td><td style="text-align:right;padding:6px"><b style="color:#16a34a;font-size:16px">${fmt(inst)}</b></td></tr>
+      <tr style="background:#eff6ff"><td style="padding:6px">Document Charge (paid at issue)</td><td style="text-align:right;padding:6px">${fmt(l.docCharge)}</td></tr>
+      <tr><td style="padding:6px">Other Charges (paid at issue)</td><td style="text-align:right;padding:6px">${fmt(l.otherCharge)}</td></tr>
+    </table>
+    ${guHtml}
+    <h3 style="color:#1e3a8a;margin:14px 0 6px">REPAYMENT SCHEDULE</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:11.5px">
+      <tr style="background:#e2e8f0"><th style="border:1px solid #cbd5e1;padding:4px">#</th><th style="border:1px solid #cbd5e1;padding:4px">Due Date</th><th style="border:1px solid #cbd5e1;padding:4px">Day</th><th style="border:1px solid #cbd5e1;padding:4px">Capital</th><th style="border:1px solid #cbd5e1;padding:4px">Interest</th><th style="border:1px solid #cbd5e1;padding:4px">Installment</th></tr>
+      ${l.schedule.map(r=>`<tr><td style="border:1px solid #cbd5e1;padding:3px;text-align:center">${r.no}</td><td style="border:1px solid #cbd5e1;padding:3px">${r.date}</td><td style="border:1px solid #cbd5e1;padding:3px">${DAYS[new Date(r.date).getDay()].slice(0,3)}</td><td style="border:1px solid #cbd5e1;padding:3px;text-align:right">${fmt(r.cap)}</td><td style="border:1px solid #cbd5e1;padding:3px;text-align:right">${fmt(r.int)}</td><td style="border:1px solid #cbd5e1;padding:3px;text-align:right"><b>${fmt(r.total)}</b></td></tr>`).join('')}
+    </table>
+    <table style="width:100%;margin-top:40px;font-size:12px"><tr>
+      <td style="text-align:center">_______________________<br>Customer<br>(${esc(c?c.full:'')})</td>
+      ${guSign}
+      <td style="text-align:center">_______________________<br>Authorized Officer</td>
+    </tr></table>
+    <div style="text-align:center;font-size:10px;color:#777;margin-top:16px;border-top:1px dashed #999;padding-top:6px">Generated on ${today()} • ${esc(settings.company)}</div>
+  </div>`;
+  setTimeout(()=>{window.print();receiptArea.innerHTML=''},200);
+}
 
-      if (userData) {
-        cur = userData;
-        localStorage.setItem('lms_session', JSON.stringify(cur));
-        boot();
-      } else {
-        alert('වැරදි Password එකක්!');
-      }
-    } else {
-      alert('එවැනි Username එකක් සොයාගත නොහැක!');
+/* ============ WHATSAPP ============ */
+function waSend(phone,text){
+  let p=(phone||'').toString().replace(/\D/g,'');
+  if(!p)return alert('❌ Customer phone number missing!');
+  if(p.startsWith('0'))p='94'+p.slice(1);
+  if(!p.startsWith('94'))p='94'+p;
+  const url='https://wa.me/'+p+'?text='+encodeURIComponent(text);
+  const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener';
+  document.body.appendChild(a);a.click();a.remove();
+}
+function waLoanReport(id){
+  const l=loans.find(x=>x.id===id);if(!l)return;
+  const c=customers.find(x=>x.id===l.customerId);if(!c)return;
+  const totInt=l.totalPayable-l.amount;
+  const inst=l.schedule[0]?l.schedule[0].total:0;
+  const dayTxt=(l.type==='weekly'&&l.weekDay!=null&&l.weekDay!=='')?' (every '+DAYS[+l.weekDay]+')':'';
+  const t=`*${settings.company}*\n📋 *LOAN DETAILS*\n\nCustomer: ${c.title}. ${c.full} (${c.no})\nNIC: ${c.nic}\n\nLoan No: *${l.no}*\nIssue Date: ${l.start}\nLoan Amount: *${fmt(l.amount)}*\nInterest: ${fmt(totInt)}\n*TOTAL PAYABLE: ${fmt(l.totalPayable)}*\n\nRepayment: ${l.type.toUpperCase()}${dayTxt}\nInstallment: *${fmt(inst)}* x ${l.n}\nFirst Due: ${l.schedule[0]?l.schedule[0].date:'-'}\nLast Due: ${l.schedule[l.schedule.length-1]?l.schedule[l.schedule.length-1].date:'-'}\n\nDoc Charge: ${fmt(l.docCharge)}\nOther: ${fmt(l.otherCharge)}\n\nThank you! 🙏`;
+  waSend(c.phone,t);
+}
+function waLedger(id){
+  const l=loans.find(x=>x.id===id);if(!l)return;
+  const c=customers.find(x=>x.id===l.customerId);if(!c)return;
+  const pays=payments.filter(p=>p.loanId===l.id);
+  let bal=l.totalPayable,lines='';
+  pays.forEach(p=>{bal-=p.amount;lines+=`${p.date} | ${p.receiptNo} | ${fmt(p.amount)} | Bal: ${fmt(bal)}\n`});
+  const nd=nextDue(l);const ar=arrearsOf(l);
+  const t=`*${settings.company}*\n📒 *LOAN STATEMENT*\n\nCustomer: ${c.title}. ${c.full} (${c.no})\nLoan No: *${l.no}*\nTotal Payable: ${fmt(l.totalPayable)}\nPaid: ${fmt(l.paid)}\n*Balance: ${fmt(l.totalPayable-l.paid)}*\n`+(ar>0?`⚠️ *ARREARS: ${fmt(ar)}*\n`:'')+(nd?`Next Payment: ${nd.date} (${fmt(nd.amount)})\n`:'🎉 SETTLED\n')+`\n*Payments:*\n${lines||'No payments\n'}\nThank you! 🙏`;
+  waSend(c.phone,t);
+}
+/* ======== PART 2 END - PART 3 MEKATA YATIN PASTE KARANNA ======== */
+/* ============ PAYMENTS ============ */
+function nextDue(l){let cum=0;for(const r of l.schedule){cum+=r.total;if(l.paid<cum-0.01)return{date:r.date,amount:cum-l.paid>r.total?r.total:cum-l.paid}}return null}
+function loanOptions(filter){
+  let act=loans.filter(l=>l.status==='active');
+  if(filter){const q=filter.toLowerCase(),qn=normNic(filter);
+    act=act.filter(l=>{const c=customers.find(x=>x.id===l.customerId);if(!c)return false;
+      return normNic(c.nic).includes(qn)||(c.full||'').toLowerCase().includes(q)||(c.no||'').toLowerCase().includes(q)||(c.phone||'').includes(filter)})}
+  return act.map(l=>{const c=customers.find(x=>x.id===l.customerId);
+    return `<option value="${l.id}">${l.no} | ${c?esc(c.no):''} ${c?esc(c.full):''} (Bal: ${fmt(l.totalPayable-l.paid)})</option>`}).join('');
+}
+function goPay(loanId){
+  nav('payments',navBtn('Payments'));
+  setTimeout(()=>{payNic.value='';payLoan.innerHTML=loanOptions('');payLoan.value=loanId;payPick()},80);
+}
+function pgPayments(){
+  const html=`<div class="card"><h3 class="sec">Record Payment</h3><div class="grid g4">
+    <div><label>🔎 Search Customer (NIC / Name / Cust No)</label><input id="payNic" placeholder="Type NIC or name..." oninput="payFilter()"></div>
+    <div><label>Loan *</label><select id="payLoan" onchange="payPick()">${loanOptions('')}</select></div>
+    <div><label>Amount (Rs.) *</label><input id="payAmt" type="number"></div>
+    <div><label>Payment Method *</label><select id="payMethod"><option>Cash</option><option>Online</option><option>Cheque</option></select></div>
+    <div style="grid-column:span 2"><label>Remark</label><input id="payRemark" placeholder="cheque no / bank ref"></div>
+    </div><div id="payArrears"></div><div id="payInfo" style="color:#475569;font-size:13px;margin-bottom:10px"></div>
+    <button class="btn green" onclick="addPayment()">💾 Save & Print Receipt</button></div>
+  <div class="card"><div class="secrow"><h3>Payment History</h3>${xlsBtn('tblPay','payments')}</div>
+  <table id="tblPay"><tr><th>Receipt No</th><th>Date</th><th>Loan</th><th>Cust No</th><th>Customer</th><th>Amount</th><th>Method</th><th>Remark</th><th>By</th><th>Actions</th></tr>
+  ${payments.slice().reverse().map(p=>{const l=loans.find(x=>x.id===p.loanId);const c=l&&customers.find(x=>x.id===l.customerId);
+  return `<tr><td><b>${p.receiptNo}</b></td><td>${p.date}</td><td>${l?l.no:''}</td><td>${c?esc(c.no):''}</td><td>${c?esc(c.full):''}</td><td>${fmt(p.amount)}</td><td>${esc(p.method||'Cash')}</td><td>${esc(p.remark||'')}</td><td>${esc(p.by)}</td>
+  <td><button class="btn sm" onclick="printReceipt('${p.id}')">🖨️</button>
+  ${isAdmin()?`<button class="btn red sm" onclick="delPaymentRow('${p.id}')">🗑️</button>`:''}</td></tr>`}).join('')||'<tr><td colspan=10>No payments</td></tr>'}</table></div>`;
+  setTimeout(payPick,60);
+  return html;
+}
+function payFilter(){payLoan.innerHTML=loanOptions(payNic.value.trim());payPick()}
+function payPick(){
+  const sel=document.getElementById('payLoan');if(!sel)return;
+  const l=loans.find(x=>x.id===sel.value);
+  if(!l){payInfo.innerHTML='';payArrears.innerHTML='';if(payAmt)payAmt.value='';return}
+  const nd=nextDue(l);const ar=arrearsOf(l);
+  payArrears.innerHTML=ar>0?`<div class="arrearsBox">🔴 ARREARS (OVERDUE): ${fmt(ar)}</div>`:'';
+  payInfo.innerHTML=nd?`Next due <b>${nd.date}</b> — amount <b>${fmt(nd.amount)}</b>`:'';
+  if(payAmt)payAmt.value=ar>0?ar.toFixed(2):(nd?nd.amount.toFixed(2):'');
+}
+function addPayment(){
+  const l=loans.find(x=>x.id===payLoan.value);const amt=+payAmt.value;
+  if(!l||!amt||amt<=0)return alert('Select loan & enter amount');
+  if(amt>l.totalPayable-l.paid+0.01)return alert('Amount exceeds balance ('+fmt(l.totalPayable-l.paid)+')');
+  l.paid+=amt;if(l.paid>=l.totalPayable-0.01)l.status='settled';
+  const rec={id:uid(),receiptNo:'RCP'+String(payments.length+1).padStart(5,'0'),loanId:l.id,amount:amt,date:today(),
+    method:payMethod.value,remark:payRemark.value,by:cur.name};
+  payments.push(rec);save();printReceipt(rec.id);nav('payments',navBtn('Payments'));
+}
+function delPaymentRow(id){
+  if(!isAdmin())return alert('❌ Only Admin can delete');
+  const p=payments.find(x=>x.id===id);if(!p)return;
+  const l=loans.find(x=>x.id===p.loanId);
+  const c=l&&customers.find(x=>x.id===l.customerId);
+  if(!confirm('Delete receipt '+p.receiptNo+'?\nCustomer: '+(c?c.full:'')+'\nAmount: '+fmt(p.amount)+'\n\nLoan balance will be adjusted back.'))return;
+  if(!adminPassOK())return;
+  if(l){l.paid=Math.max(0,l.paid-p.amount);if(l.status==='settled'&&l.paid<l.totalPayable-0.01)l.status='active'}
+  payments=payments.filter(x=>x.id!==id);
+  save();alert('🗑️ Deleted & balance adjusted.');nav('payments',navBtn('Payments'));
+}
+function printReceipt(pid){
+  const p=payments.find(x=>x.id===pid);const l=loans.find(x=>x.id===p.loanId);const c=customers.find(x=>x.id===l.customerId);
+  const nd=nextDue(l);const ar=arrearsOf(l);
+  receiptArea.innerHTML=`<div style="max-width:420px;margin:auto;border:2px solid #1e3a8a;border-radius:10px;padding:24px;font-size:14px">
+    <div style="text-align:center">${settings.logo?`<img src="${settings.logo}" style="max-height:70px">`:''}
+    <h2 style="color:#1e3a8a">${esc(settings.company)}</h2>
+    <div style="font-size:12px;color:#555">${esc(settings.address)}${settings.phone?' | '+esc(settings.phone):''}</div>
+    <h3 style="margin:10px 0;border-top:1px dashed #999;border-bottom:1px dashed #999;padding:6px">PAYMENT RECEIPT</h3></div>
+    <table style="width:100%;font-size:13px">
+    <tr><td>Receipt No:</td><td style="text-align:right"><b>${p.receiptNo}</b></td></tr>
+    <tr><td>Date:</td><td style="text-align:right">${p.date}</td></tr>
+    <tr><td>Customer No:</td><td style="text-align:right"><b>${esc(c?c.no:'')}</b></td></tr>
+    <tr><td>Customer:</td><td style="text-align:right">${esc(c?c.title+'. '+c.full:'')}</td></tr>
+    <tr><td>NIC:</td><td style="text-align:right">${esc(c?c.nic:'')}</td></tr>
+    <tr><td>Loan No:</td><td style="text-align:right"><b>${l.no}</b></td></tr>
+    <tr><td>Method:</td><td style="text-align:right"><b>${esc(p.method||'Cash')}</b></td></tr>
+    ${p.remark?`<tr><td>Remark:</td><td style="text-align:right">${esc(p.remark)}</td></tr>`:''}
+    <tr><td style="padding-top:8px"><b>Amount Paid:</b></td><td style="text-align:right;padding-top:8px"><b style="font-size:17px;color:#16a34a">${fmt(p.amount)}</b></td></tr>
+    <tr><td>Outstanding Balance:</td><td style="text-align:right">${fmt(l.totalPayable-l.paid)}</td></tr>
+    ${ar>0?`<tr><td style="color:#dc2626"><b>⚠️ ARREARS:</b></td><td style="text-align:right"><b style="color:#dc2626">${fmt(ar)}</b></td></tr>`:''}
+    ${nd?`<tr><td><b>Next Payment Date:</b></td><td style="text-align:right"><b style="color:#dc2626">${nd.date}</b></td></tr>
+    <tr><td>Next Installment:</td><td style="text-align:right">${fmt(nd.amount)}</td></tr>`:`<tr><td colspan=2 style="text-align:center;color:#16a34a;padding-top:8px"><b>🎉 LOAN FULLY SETTLED</b></td></tr>`}
+    </table>
+    <div style="text-align:center;font-size:11px;color:#777;margin-top:14px;border-top:1px dashed #999;padding-top:8px">Collected by: ${esc(p.by)} • Thank you!</div>
+  </div>`;
+  setTimeout(()=>{window.print();receiptArea.innerHTML=''},200);
+}
+
+/* ============ DUE / WEEK DAY (auto today) ============ */
+function pgDue(){
+  const todayWd=new Date().getDay();
+  setTimeout(renderDue,60);
+  return `<div class="card"><div class="secrow"><h3>📅 Payments Due Today / Overdue</h3></div>
+    <div class="grid g3"><div><label>📅 Week Day (ada dawasa auto select)</label>
+    <select id="dueDay" onchange="renderDue()">
+      ${[1,2,3,4,5,6,0].map(d=>`<option value="${d}" ${todayWd===d?'selected':''}>${DAYS[d]}${todayWd===d?' — TODAY':''}</option>`).join('')}
+    </select></div></div>
+    <div id="dueOut"></div></div>`;
+}
+function renderDue(){
+  const sel=document.getElementById('dueDay');if(!sel)return;
+  const wd=+sel.value;
+  const out=document.getElementById('dueOut');
+  const rows=[];
+  loans.filter(l=>l.status==='active').forEach(l=>{
+    const nd=nextDue(l);if(!nd)return;
+    const isWeeklyDay=(l.type==='weekly'&&l.weekDay!==''&&l.weekDay!=null&&+l.weekDay===wd);
+    const ndDay=new Date(nd.date).getDay()===wd;
+    const overdue=nd.date<=today();
+    if(isWeeklyDay||ndDay||overdue){
+      const c=customers.find(x=>x.id===l.customerId);
+      rows.push({l,c,nd,ar:arrearsOf(l),overdue});
     }
   });
+  rows.sort((a,b)=>(b.overdue?1:0)-(a.overdue?1:0));
+  const tot=rows.reduce((s,r)=>s+r.nd.amount,0);
+  const totAr=rows.reduce((s,r)=>s+r.ar,0);
+  out.innerHTML=`
+  <div class="grid g3" style="margin:12px 0">
+    <div class="stat"><div class="v">${rows.length}</div><div class="l">Customers — ${DAYS[wd]} + Overdue</div></div>
+    <div class="stat green"><div class="v">${fmt(tot)}</div><div class="l">Total to Collect</div></div>
+    <div class="stat red"><div class="v">${fmt(totAr)}</div><div class="l">⚠️ Total Arrears</div></div>
+  </div>
+  <div style="text-align:right;margin-bottom:8px">${xlsBtn('tblDueDay','due-'+DAYS[wd])}
+  <button class="btn sm gray" onclick="window.print()">🖨️ Print Sheet</button></div>
+  <table id="tblDueDay"><tr><th>Cust No</th><th>Customer</th><th>Phone</th><th>Loan No</th><th>Next Due</th><th>Installment</th><th>Arrears</th><th>Balance</th><th>Status</th><th></th></tr>
+  ${rows.map(r=>`<tr><td>${esc(r.c?r.c.no:'')}</td><td><b>${esc(r.c?r.c.full:'')}</b></td><td>${esc(r.c?r.c.phone:'')}</td>
+  <td>${r.l.no}</td><td>${r.nd.date}</td><td><b>${fmt(r.nd.amount)}</b></td>
+  <td>${r.ar>0?`<b style="color:var(--bad)">${fmt(r.ar)}</b>`:'-'}</td>
+  <td>${fmt(r.l.totalPayable-r.l.paid)}</td>
+  <td>${r.nd.date<today()?'<span class="badge b-over">OVERDUE</span>':r.nd.date===today()?'<span class="badge b-pending">DUE TODAY</span>':'<span class="badge b-active">'+DAYS[wd].slice(0,3).toUpperCase()+'</span>'}</td>
+  <td><button class="btn green sm" onclick="goPay('${r.l.id}')">💰 Pay</button></td></tr>`).join('')||'<tr><td colspan=10>😊 No customers due</td></tr>'}
+  <tr><td colspan=5 style="text-align:right"><b>TOTAL</b></td><td><b>${fmt(tot)}</b></td><td><b style="color:var(--bad)">${fmt(totAr)}</b></td><td colspan=3></td></tr></table>`;
+}
+
+/* ============ LEDGER ============ */
+function pgLedger(){
+  const html=`<div class="card"><h3 class="sec">📒 Customer Loan Ledger / Statement</h3>
+    <div class="grid g3">
+    <div><label>🔎 Search (NIC / Name / Cust No)</label><input id="ldQ" oninput="ldFilter()"></div>
+    <div><label>Select Loan</label><select id="ldLoan" onchange="showLedger()">${ledgerOptions('')}</select></div>
+    <div style="align-self:end"><button class="btn" onclick="showLedger()">View Ledger</button></div>
+    </div><div id="ldOut"></div></div>`;
+  setTimeout(showLedger,60);
+  return html;
+}
+function ledgerOptions(filter){
+  let list=loans.filter(l=>l.status!=='pending');
+  if(filter){const q=filter.toLowerCase(),qn=normNic(filter);
+    list=list.filter(l=>{const c=customers.find(x=>x.id===l.customerId);if(!c)return false;
+      return normNic(c.nic).includes(qn)||(c.full||'').toLowerCase().includes(q)||(c.no||'').toLowerCase().includes(q)})}
+  return list.map(l=>{const c=customers.find(x=>x.id===l.customerId);
+    return `<option value="${l.id}">${l.no} | ${c?esc(c.no)+' '+esc(c.full):''} (${l.status})</option>`}).join('');
+}
+function ldFilter(){ldLoan.innerHTML=ledgerOptions(ldQ.value.trim());showLedger()}
+function showLedger(){
+  const sel=document.getElementById('ldLoan');if(!sel)return;
+  const l=loans.find(x=>x.id===sel.value);
+  const out=document.getElementById('ldOut');
+  if(!l){out.innerHTML='';return}
+  const c=customers.find(x=>x.id===l.customerId);
+  const pays=payments.filter(p=>p.loanId===l.id);
+  const nd=nextDue(l);const ar=arrearsOf(l);
+  let bal=l.totalPayable;
+  let rows=`<tr><td>${l.start}</td><td><b>Loan Granted</b> — ${l.no} (Capital ${fmt(l.amount)} + Interest ${fmt(l.totalPayable-l.amount)})</td><td style="text-align:right">${fmt(l.totalPayable)}</td><td></td><td style="text-align:right"><b>${fmt(bal)}</b></td></tr>`;
+  rows+=`<tr><td>${l.start}</td><td>Document + Other Charges (paid at issue)</td><td style="text-align:right">${fmt((l.docCharge||0)+(l.otherCharge||0))}</td><td style="text-align:right">${fmt((l.docCharge||0)+(l.otherCharge||0))}</td><td style="text-align:right"><b>${fmt(bal)}</b></td></tr>`;
+  pays.forEach(p=>{bal-=p.amount;
+    rows+=`<tr><td>${p.date}</td><td>Payment — ${p.receiptNo} (${esc(p.method||'Cash')}) by ${esc(p.by)}</td><td></td><td style="text-align:right;color:var(--ok)"><b>${fmt(p.amount)}</b></td><td style="text-align:right"><b>${fmt(bal)}</b></td></tr>`});
+  out.innerHTML=`
+  <div class="pvBox" style="margin-top:14px">
+    <div class="row"><span>Customer</span><b>${esc(c?c.no+' — '+c.title+'. '+c.full:'')}</b></div>
+    <div class="row"><span>Loan ${l.no} — Total Payable</span><b>${fmt(l.totalPayable)}</b></div>
+    <div class="row"><span>Total Paid</span><b style="color:var(--ok)">${fmt(l.paid)}</b></div>
+    <div class="row"><span>Balance</span><b class="big">${fmt(l.totalPayable-l.paid)}</b></div>
+    ${ar>0?`<div class="row"><span>⚠️ Arrears</span><b style="color:var(--bad)">${fmt(ar)}</b></div>`:''}
+    ${nd?`<div class="row"><span>Next Payment</span><b>${nd.date} — ${fmt(nd.amount)}</b></div>`:`<div class="row"><span>Status</span><b style="color:var(--ok)">🎉 SETTLED</b></div>`}
+  </div>
+  <div style="text-align:right;margin-bottom:8px">
+    ${xlsBtn('tblLedger','ledger-'+l.no)}
+    <button class="btn sm xl" onclick="waLedger('${l.id}')">📱 WhatsApp</button>
+    <button class="btn sm gray" onclick="window.print()">🖨️ Print</button>
+  </div>
+  <table id="tblLedger"><tr><th>Date</th><th>Description</th><th>Debit</th><th>Credit</th><th>Balance</th></tr>${rows}</table>`;
+}
+
+/* ============ REPORTS ============ */
+function pgCollection(){
+  return `<div class="card"><h3 class="sec">Collection Report (Date Range)</h3><div class="grid g3">
+    <div><label>From</label><input id="rFrom" type="date" value="${today()}"></div>
+    <div><label>To</label><input id="rTo" type="date" value="${today()}"></div>
+    <div style="align-self:end"><button class="btn" onclick="runReport()">Generate</button></div></div>
+  <div id="repOut"></div></div>`;
+}
+function runReport(){
+  const list=payments.filter(p=>p.date>=rFrom.value&&p.date<=rTo.value);
+  const tot=list.reduce((s,p)=>s+p.amount,0);
+  repOut.innerHTML=`<div style="text-align:right;margin-bottom:8px">${xlsBtn('tblRep','collection-report')}</div>
+  <table id="tblRep"><tr><th>Receipt</th><th>Date</th><th>Loan</th><th>Customer</th><th>Method</th><th>Remark</th><th>Collector</th><th>Amount</th></tr>
+  ${list.map(p=>{const l=loans.find(x=>x.id===p.loanId);const c=l&&customers.find(x=>x.id===l.customerId);
+  return `<tr><td>${p.receiptNo}</td><td>${p.date}</td><td>${l?l.no:''}</td><td>${c?esc(c.full):''}</td><td>${esc(p.method||'Cash')}</td><td>${esc(p.remark||'')}</td><td>${esc(p.by)}</td><td>${fmt(p.amount)}</td></tr>`}).join('')||'<tr><td colspan=8>No collections</td></tr>'}
+  <tr><td colspan=7 style="text-align:right"><b>TOTAL</b></td><td><b>${fmt(tot)}</b></td></tr></table>
+  <button class="btn gray" style="margin-top:10px" onclick="window.print()">🖨️ Print</button>`;
+}
+function pgMonthly(){
+  const m=today().slice(0,7);
+  return `<div class="card"><h3 class="sec">Monthly Report</h3><div class="grid g3">
+    <div><label>Select Month</label><input id="mMonth" type="month" value="${m}"></div>
+    <div style="align-self:end"><button class="btn" onclick="runMonthly()">Generate</button></div></div>
+  <div id="mOut"></div></div>`;
+}
+function runMonthly(){
+  const m=mMonth.value;if(!m)return alert('Select a month');
+  const list=payments.filter(p=>p.date.slice(0,7)===m);
+  const tot=list.reduce((s,p)=>s+p.amount,0);
+  const cash=list.filter(p=>(p.method||'Cash')==='Cash').reduce((s,p)=>s+p.amount,0);
+  const online=list.filter(p=>p.method==='Online').reduce((s,p)=>s+p.amount,0);
+  const cheque=list.filter(p=>p.method==='Cheque').reduce((s,p)=>s+p.amount,0);
+  const mLoans=loans.filter(l=>l.start&&l.start.slice(0,7)===m);
+  const days={};list.forEach(p=>{days[p.date]=(days[p.date]||0)+p.amount});
+  const dayRows=Object.keys(days).sort().map(d=>`<tr><td>${d}</td><td>${list.filter(p=>p.date===d).length}</td><td>${fmt(days[d])}</td></tr>`).join('');
+  mOut.innerHTML=`
+  <div class="grid g4" style="margin:14px 0">
+    <div class="stat"><div class="v">${fmt(tot)}</div><div class="l">Total (${list.length} receipts)</div></div>
+    <div class="stat"><div class="v">${fmt(cash)}</div><div class="l">💵 Cash</div></div>
+    <div class="stat"><div class="v">${fmt(online)}</div><div class="l">🌐 Online</div></div>
+    <div class="stat"><div class="v">${fmt(cheque)}</div><div class="l">🏦 Cheque</div></div>
+  </div>
+  <div class="secrow"><h3>Loans Issued in ${m} (${mLoans.length})</h3>${xlsBtn('tblMLoans','monthly-loans-'+m)}</div>
+  <table id="tblMLoans"><tr><th>Loan No</th><th>Date</th><th>Customer</th><th>Amount</th><th>Type</th><th>Officer</th><th>Status</th></tr>
+  ${mLoans.map(l=>{const c=customers.find(x=>x.id===l.customerId);
+  return `<tr><td>${l.no}</td><td>${l.start}</td><td>${c?esc(c.full):''}</td><td>${fmt(l.amount)}</td><td>${l.type}</td><td>${esc(l.createdBy||'')}</td><td><span class="badge b-${l.status}">${l.status.toUpperCase()}</span></td></tr>`}).join('')||'<tr><td colspan=7>No loans</td></tr>'}</table>
+  <div class="secrow" style="margin-top:16px"><h3>Day-wise Collection</h3>${xlsBtn('tblMDays','monthly-daywise-'+m)}</div>
+  <table id="tblMDays"><tr><th>Date</th><th>Receipts</th><th>Collected</th></tr>${dayRows||'<tr><td colspan=3>No collections</td></tr>'}
+  <tr><td colspan=2 style="text-align:right"><b>TOTAL</b></td><td><b>${fmt(tot)}</b></td></tr></table>
+  <button class="btn gray" style="margin-top:10px" onclick="window.print()">🖨️ Print</button>`;
+}
+function pgProfit(){
+  const y=today().slice(0,4);
+  return `<div class="card"><h3 class="sec">Profit Report (by Loan Issue Date)</h3><div class="grid g3">
+    <div><label>From</label><input id="pfFrom" type="date" value="${y}-01-01"></div>
+    <div><label>To</label><input id="pfTo" type="date" value="${today()}"></div>
+    <div style="align-self:end"><button class="btn" onclick="runProfit()">Generate</button></div></div>
+  <div id="pfOut"></div></div>`;
+}
+function runProfit(){
+  const list=loans.filter(l=>l.status!=='pending'&&l.start>=pfFrom.value&&l.start<=pfTo.value);
+  let tInt=0,tDoc=0,tOther=0,tExp=0,tReal=0;
+  const rows=list.map(l=>{
+    const c=customers.find(x=>x.id===l.customerId);
+    const int=l.totalPayable-l.amount;
+    const expected=int+(l.docCharge||0)+(l.otherCharge||0);
+    const realized=(l.totalPayable?int*(l.paid/l.totalPayable):0)+(l.docCharge||0)+(l.otherCharge||0);
+    tInt+=int;tDoc+=l.docCharge||0;tOther+=l.otherCharge||0;tExp+=expected;tReal+=realized;
+    return `<tr><td><b>${l.no}</b></td><td>${l.start}</td><td>${c?esc(c.no)+' '+esc(c.full):''}</td><td>${fmt(l.amount)}</td>
+    <td>${fmt(int)}</td><td>${fmt(l.docCharge)}</td><td>${fmt(l.otherCharge)}</td>
+    <td>${fmt(expected)}</td><td>${fmt(realized)}</td>
+    <td><span class="badge b-${l.status}">${l.status.toUpperCase()}</span></td></tr>`}).join('');
+  pfOut.innerHTML=`
+  <div class="grid g4" style="margin:14px 0">
+    <div class="stat green"><div class="v">${fmt(tExp)}</div><div class="l">Expected Profit</div></div>
+    <div class="stat green"><div class="v">${fmt(tReal)}</div><div class="l">Realized Profit</div></div>
+    <div class="stat"><div class="v">${fmt(tInt)}</div><div class="l">Total Interest</div></div>
+    <div class="stat"><div class="v">${fmt(tDoc+tOther)}</div><div class="l">Charges</div></div>
+  </div>
+  <div style="text-align:right;margin-bottom:8px">${xlsBtn('tblProfit','profit-report')}</div>
+  <table id="tblProfit"><tr><th>Loan No</th><th>Date</th><th>Customer</th><th>Amount</th><th>Interest</th><th>Doc</th><th>Other</th><th>Expected</th><th>Realized</th><th>Status</th></tr>
+  ${rows||'<tr><td colspan=10>No loans</td></tr>'}
+  <tr><td colspan=4 style="text-align:right"><b>TOTALS</b></td><td><b>${fmt(tInt)}</b></td><td><b>${fmt(tDoc)}</b></td><td><b>${fmt(tOther)}</b></td><td><b>${fmt(tExp)}</b></td><td><b>${fmt(tReal)}</b></td><td></td></tr></table>
+  <button class="btn gray" style="margin-top:6px" onclick="window.print()">🖨️ Print</button>`;
+}
+function pgOfficer(){
+  const m=today().slice(0,7);
+  return `<div class="card"><h3 class="sec">🎯 Officer Target / Performance</h3><div class="grid g3">
+    <div><label>From</label><input id="ofFrom" type="date" value="${m}-01"></div>
+    <div><label>To</label><input id="ofTo" type="date" value="${today()}"></div>
+    <div style="align-self:end"><button class="btn" onclick="runOfficer()">Generate</button></div></div>
+  <div id="ofOut"></div></div>`;
+}
+function runOfficer(){
+  const f=ofFrom.value,t=ofTo.value;
+  const perf={};
+  loans.filter(l=>l.start>=f&&l.start<=t&&l.status!=='pending').forEach(l=>{
+    const k=l.createdBy||'Unknown';perf[k]=perf[k]||{loans:0,loanAmt:0,cols:0,colAmt:0};
+    perf[k].loans++;perf[k].loanAmt+=l.amount;});
+  payments.filter(p=>p.date>=f&&p.date<=t).forEach(p=>{
+    const k=p.by||'Unknown';perf[k]=perf[k]||{loans:0,loanAmt:0,cols:0,colAmt:0};
+    perf[k].cols++;perf[k].colAmt+=p.amount;});
+  let tL=0,tLA=0,tC=0,tCA=0;
+  const rows=Object.keys(perf).map(k=>{
+    const v=perf[k];tL+=v.loans;tLA+=v.loanAmt;tC+=v.cols;tCA+=v.colAmt;
+    const u=users.find(x=>x.name===k);
+    return `<tr><td><b>${esc(k)}</b></td><td>${u?u.role:'-'}</td><td>${v.loans}</td><td>${fmt(v.loanAmt)}</td><td>${v.cols}</td><td>${fmt(v.colAmt)}</td></tr>`}).join('');
+  ofOut.innerHTML=`
+  <div style="text-align:right;margin:12px 0 8px">${xlsBtn('tblOfficer','officer-report')}</div>
+  <table id="tblOfficer"><tr><th>Officer</th><th>Role</th><th>Loans Issued</th><th>Loan Amount</th><th>Receipts</th><th>Collected</th></tr>
+  ${rows||'<tr><td colspan=6>No activity</td></tr>'}
+  <tr><td colspan=2 style="text-align:right"><b>TOTALS</b></td><td><b>${tL}</b></td><td><b>${fmt(tLA)}</b></td><td><b>${tC}</b></td><td><b>${fmt(tCA)}</b></td></tr></table>
+  <button class="btn gray" style="margin-top:10px" onclick="window.print()">🖨️ Print</button>`;
+}
+
+/* ============ USERS ============ */
+function pgUsers(){
+  const admin=isAdmin();
+  return `<div class="card"><div class="secrow"><h3>System Users</h3>${xlsBtn('tblUsers','users')}</div>
+  <table id="tblUsers"><tr><th>Name</th><th>Username</th><th>Role</th><th>Approval Limit</th><th></th></tr>
+  ${users.map(u=>`<tr><td><b>${esc(u.name)}</b></td><td>${esc(u.username)}</td>
+  <td>${admin?`<select onchange="setRole('${u.id}',this.value)" style="margin:0"><option ${u.role==='Admin'?'selected':''}>Admin</option><option ${u.role==='Manager'?'selected':''}>Manager</option><option ${u.role==='Officer'?'selected':''}>Officer</option></select>`:u.role}</td>
+  <td>${admin?`<input type="number" value="${u.limit||0}" style="width:140px;margin:0" onchange="setLimit('${u.id}',this.value)">`:fmt(u.limit||0)}</td>
+  <td>${admin&&u.id!==cur.id?`<button class="btn red sm" onclick="delUser('${u.id}')">🗑️</button>`:''}</td></tr>`).join('')}</table></div>`;
+}
+function setRole(id,v){if(!isAdmin())return;const u=users.find(x=>x.id===id);u.role=v;if(v==='Admin')u.limit=999999999;save()}
+function setLimit(id,v){if(!isAdmin())return;users.find(x=>x.id===id).limit=+v;save()}
+function delUser(id){if(!isAdmin())return alert('Only Admin');if(confirm('Remove user?')){users=users.filter(u=>u.id!==id);save();nav('users',navBtn('Users'))}}
+
+/* ============ SETTINGS + DANGER ZONE ============ */
+function pgSettings(){
+  let html=`<div class="card"><h3 class="sec">Company Settings</h3><div class="grid g2">
+    <div><label>Company Name</label><input id="setCo" value="${esc(settings.company)}">
+    <label>Address</label><input id="setAddr" value="${esc(settings.address)}">
+    <label>Phone</label><input id="setPh" value="${esc(settings.phone)}">
+    <label>Company Logo</label><input id="setLogo" type="file" accept="image/*">
+    <button class="btn green" onclick="saveSettings()">💾 Save Settings</button></div>
+    <div style="text-align:center">${settings.logo?`<img src="${settings.logo}" style="max-height:120px;border:1px solid #ddd;border-radius:8px;padding:8px">`:'<p style="color:#94a3b8">No logo</p>'}</div>
+  </div></div>
+  <div class="card"><h3 class="sec">💾 Data Backup</h3>
+  <button class="btn" onclick="backup()">⬇️ Download Backup</button>
+  <button class="btn green" style="margin-left:8px" onclick="gQuick()">☁️ Backup & Open Google Drive</button>
+  <input type="file" accept=".json" style="width:auto;display:inline-block;margin-left:10px" onchange="restore(this)">
+  <p style="font-size:12px;color:#64748b;margin-top:8px">Data browser eke save wenawa. Backup ekak nithara ganna!</p></div>`;
+  if(isAdmin()){
+    html+=`<div class="card" style="border:3px solid #dc2626;background:#fef2f2">
+    <h3 class="sec" style="color:#dc2626">🔴 DANGER ZONE (Admin Only)</h3>
+    <button class="btn red" onclick="delPaymentByReceipt()">🗑️ Delete Payment by Receipt No</button>
+    <button class="btn red" style="margin-left:8px" onclick="fullClear()">💣 FULL CLEAR - Wipe ALL Data</button>
+    <p style="font-size:12px;color:#991b1b;margin-top:8px">⚠️ Full Clear: confirm 3 sarayak + admin password. Backup aran witharak karanna!</p></div>`;
+  }
+  return html;
+}
+function saveSettings(){
+  settings.company=setCo.value;settings.address=setAddr.value;settings.phone=setPh.value;
+  const f=setLogo.files[0];
+  if(f){const r=new FileReader();r.onload=e=>{settings.logo=e.target.result;save();applyBrand();alert('Saved!');nav('settings',navBtn('Settings'))};r.readAsDataURL(f)}
+  else{save();applyBrand();alert('Saved!');nav('settings',navBtn('Settings'))}
+}
+function backup(){
+  const blob=new Blob([JSON.stringify({users,groups,customers,products,loans,payments,settings})],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='loan-backup-'+today()+'.json';a.click();
+}
+function restore(inp){
+  const f=inp.files[0];if(!f)return;const r=new FileReader();
+  r.onload=e=>{try{const d=JSON.parse(e.target.result);users=d.users||[];groups=d.groups||[];customers=d.customers||[];
+  products=d.products||[];loans=d.loans||[];payments=d.payments||[];settings=d.settings||settings;save();alert('Restored!');location.reload()}catch{alert('Invalid backup file')}};
+  r.readAsText(f);
+}
+function gQuick(){backup();window.open('https://drive.google.com/drive/my-drive','_blank');
+  alert('✅ Backup downloaded! Google Drive opened - drag & drop the file into it.')}
+function delPaymentByReceipt(){
+  if(!isAdmin())return alert('❌ Only Admin');
+  const rn=prompt('Enter Receipt No (e.g. RCP00005):');if(!rn)return;
+  const p=payments.find(x=>(x.receiptNo||'').toUpperCase()===rn.trim().toUpperCase());
+  if(!p)return alert('❌ Receipt not found');
+  delPaymentRow(p.id);
+}
+function fullClear(){
+  if(!isAdmin())return alert('❌ Only Admin');
+  if(!confirm('⚠️ CONFIRM 1 of 3\n\nDELETE EVERYTHING: Customers, Loans, Payments, Products, Groups, Users, Settings.\n\nContinue?'))return;
+  if(!confirm('⚠️ CONFIRM 2 of 3\n\nALL DATA LOST FOREVER. Backup ekak gaththada?\n\nContinue?'))return;
+  if(!confirm('🔴 FINAL CONFIRM 3 of 3\n\n100% SURE? CANNOT be undone!'))return;
+  if(!adminPassOK())return;
+  Object.keys(localStorage).filter(k=>k.startsWith('lms_')).forEach(k=>localStorage.removeItem(k));
+  alert('🗑️ ALL DATA CLEARED.');location.reload();
+}
+
+/* ============ INIT ============ */
+applyBrand();
+if(cur&&users.find(u=>u.id===cur.id))boot();
+/* ===== CUSTOMER EDIT OPTION ===== */
+let editCid=null;
+
+/* Customers page - redefine with Edit button */
+function pgCustomers(){
+  const ec=editCid?customers.find(x=>x.id===editCid):null;
+  return `<div class="card"><h3 class="sec">${ec?'✏️ EDIT Customer: '+esc(ec.no)+' - '+esc(ec.full):'Create Customer (Next No: <b>'+nextCustNo()+'</b>)'}</h3><div class="grid g4">
+    <div><label>Group</label><select id="cGroup"><option value="">-- None --</option>${groups.map(g=>`<option value="${g.id}" ${ec&&ec.group===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}</select></div>
+    <div><label>Title</label><select id="cTitle">${['Mr','Mrs','Miss','Rev','Dr'].map(t=>`<option ${ec&&ec.title===t?'selected':''}>${t}</option>`).join('')}</select></div>
+    <div><label>Full Name *</label><input id="cFull" value="${ec?esc(ec.full):''}"></div>
+    <div><label>Other Names</label><input id="cOther" value="${ec?esc(ec.other||''):''}"></div>
+    <div><label>NIC *</label><input id="cNic" value="${ec?esc(ec.nic):''}" oninput="nicCheck()"><div id="nicWarn" style="color:var(--bad);font-size:12px;margin-top:-6px;margin-bottom:8px"></div></div>
+    <div><label>Phone No *</label><input id="cPhone" value="${ec?esc(ec.phone):''}"></div>
+    <div><label>Email</label><input id="cEmail" type="email" value="${ec?esc(ec.email||''):''}"></div>
+    <div><label>Location (Google Map link)</label><input id="cMap" value="${ec?esc(ec.map||''):''}" placeholder="https://maps.google.com/..."></div>
+    <div><label>Address</label><input id="cAddr" value="${ec?esc(ec.addr||''):''}"></div>
+    <div><label>Date of Birth</label><input id="cDob" type="date" value="${ec?esc(ec.dob||''):''}"></div>
+    <div><label>Gender</label><select id="cGender">${['Male','Female'].map(t=>`<option ${ec&&ec.gender===t?'selected':''}>${t}</option>`).join('')}</select></div>
+    <div><label>Marital Status</label><select id="cMar">${['Single','Married','Divorced','Widowed'].map(t=>`<option ${ec&&ec.marital===t?'selected':''}>${t}</option>`).join('')}</select></div>
+    </div>
+    <button class="btn ${ec?'orange':'green'}" onclick="addCustomer()">${ec?'💾 Update Customer':'+ Save Customer'}</button>
+    ${ec?`<button class="btn gray" style="margin-left:8px" onclick="editCid=null;nav('customers',navBtn('Customers'))">✖ Cancel Edit</button>`:''}
+    </div>
+  <div class="card"><div class="secrow"><h3>Customers (${customers.length})</h3>${xlsBtn('tblCust','customers')}</div>
+  <table id="tblCust"><tr><th>Cust No</th><th>Name</th><th>NIC</th><th>Phone</th><th>Group</th><th>Joined</th><th>Map</th><th>Loans</th><th>Actions</th></tr>
+  ${customers.map(c=>{const g=groups.find(x=>x.id===c.group);const ln=loans.filter(l=>l.customerId===c.id&&l.status!=='settled').length;
+   return `<tr><td><b>${esc(c.no)}</b></td><td><b>${esc(c.title)}. ${esc(c.full)}</b><br><small>${esc(c.email)}</small></td><td>${esc(c.nic)}</td><td>${esc(c.phone)}</td>
+   <td>${g?esc(g.name):'-'}</td><td>${esc(c.joined)}</td><td>${c.map?`<a href="${esc(c.map)}" target="_blank">📍 Map</a>`:'-'}</td>
+   <td>${ln?`<span class="badge b-active">${ln} active</span>`:'<span class="badge b-settled">clear</span>'}</td>
+   <td><button class="btn orange sm" onclick="editCustomer('${c.id}')">✏️ Edit</button>
+   ${isAdmin()?`<button class="btn red sm" onclick="delCustomer('${c.id}')">🗑️</button>`:''}</td></tr>`}).join('')||'<tr><td colspan=9>No customers</td></tr>'}</table></div>`;
+}
+
+/* Edit button - form ekata data load karanawa */
+function editCustomer(id){
+  editCid=id;
+  nav('customers',navBtn('Customers'));
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* NIC check - edit karaddi thamange NIC eka duplicate kiyala pennanne na */
+function nicCheck(){
+  const dup=customers.find(c=>normNic(c.nic)===normNic(cNic.value)&&cNic.value.trim()&&c.id!==editCid);
+  nicWarn.textContent=dup?'⚠️ NIC already registered to: '+dup.full+' ('+dup.no+')':'';
+}
+
+/* Save - create OR update */
+function addCustomer(){
+  if(!cFull.value.trim()||!cNic.value.trim()||!cPhone.value.trim())return alert('Full name, NIC & Phone are required');
+  const dup=customers.find(c=>normNic(c.nic)===normNic(cNic.value)&&c.id!==editCid);
+  if(dup)return alert('❌ DUPLICATE NIC! Already registered to: '+dup.full+' ('+dup.no+')');
+  if(editCid){
+    /* UPDATE existing customer - Cust No, Join Date, Documents ehemama thiyenawa */
+    const c=customers.find(x=>x.id===editCid);if(!c)return;
+    c.group=cGroup.value;c.title=cTitle.value;c.full=cFull.value.trim();c.other=cOther.value;
+    c.nic=normNic(cNic.value);c.phone=cPhone.value.trim();c.email=cEmail.value;c.map=cMap.value;
+    c.addr=cAddr.value;c.dob=cDob.value;c.gender=cGender.value;c.marital=cMar.value;
+    editCid=null;
+    save();alert('✅ Customer updated!');nav('customers',navBtn('Customers'));
+    return;
+  }
+  customers.push({id:uid(),no:nextCustNo(),joined:today(),group:cGroup.value,title:cTitle.value,full:cFull.value.trim(),other:cOther.value,nic:normNic(cNic.value),
+    phone:cPhone.value.trim(),email:cEmail.value,map:cMap.value,addr:cAddr.value,dob:cDob.value,gender:cGender.value,marital:cMar.value});
+  save();nav('customers',navBtn('Customers'));
 }
 </script>
 </body>
