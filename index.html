@@ -125,7 +125,6 @@ const firebaseConfig = {
 
 /* ============ STORAGE ============ */
 // No more local storage for application data - it's all in Firebase
-// const db={g:(k,d)=>JSON.parse(localStorage.getItem('lms_'+k))??d, s:(k,v)=>localStorage.setItem('lms_'+k,JSON.stringify(v))};
 
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
@@ -141,7 +140,7 @@ let customers = [];
 let products = [];
 let loans = [];
 let payments = [];
-let settings = {}; // Initialized empty, will be loaded from Firebase
+let settings = {company:'Loan Management System',address:'',phone:'',logo:''}; // Set a clear default for initial load
 
 let cur = null; // Current user, populated by Firebase auth listener
 
@@ -267,7 +266,11 @@ async function loadAllAppDataFromFirebase() {
     products = data?.products ? Object.values(data.products) : [];
     loans = data?.loans ? Object.values(data.loans) : [];
     payments = data?.payments ? Object.values(data.payments) : [];
-    settings = data?.settings || {company:'My Company',address:'',phone:'',logo:''};
+    
+    // IMPORTANT: settings should be treated as an object, not an array of objects
+    settings = data?.settings || {company:'Loan Management System',address:'',phone:'',logo:''}; // Fallback default
+    
+    console.log("Settings loaded from Firebase:", settings);
 
     // Ensure customer numbers and join dates are set for any legacy local storage customers
     // This part ensures data consistency after loading from Firebase
@@ -303,17 +306,20 @@ async function bootApp(){
   loginScreen.classList.add('hidden');
   app.classList.remove('hidden');
   userChip.textContent=cur.name+' ('+cur.role+')';
-  applyBrand();
-
-  await loadAllAppDataFromFirebase(); // Load all application data from Firebase
-
+  
+  await loadAllAppDataFromFirebase(); // Ensure settings are loaded
+  applyBrand(); // Apply the freshly loaded settings to the UI
+  console.log("App booted with settings:", settings);
   nav('dashboard',document.querySelector('aside button'));
 }
 
 function applyBrand(){
-  sideCompany.textContent=settings.company;loginCompany.textContent=settings.company;
-  sideLogo.src=settings.logo||'';loginLogo.src=settings.logo||'';
-  sideLogo.style.display=settings.logo?'':'none';loginLogo.style.display=settings.logo?'':'none';
+  sideCompany.textContent=settings.company;
+  loginCompany.textContent=settings.company;
+  sideLogo.src=settings.logo||'';
+  loginLogo.src=settings.logo||'';
+  sideLogo.style.display=settings.logo?'':'none';
+  loginLogo.style.display=settings.logo?'':'none';
 }
 
 // Simplified adminPassOK for client-side only. For actual security, re-authentication or server-side checks are needed.
@@ -359,6 +365,9 @@ firebase.auth().onAuthStateChanged(async (user) => {
     cur = null;
     loginScreen.classList.remove('hidden');
     app.classList.add('hidden');
+    // On logout or initial load without login, revert settings to default for the login screen
+    settings = {company:'Loan Management System',address:'',phone:'',logo:''};
+    applyBrand(); // Apply default brand
   }
 });
 
@@ -1479,7 +1488,7 @@ async function saveSettings(){
       try {
         await appDataRef.child('settings').set(updatedSettings);
         await loadAllAppDataFromFirebase(); // Reload data after update
-        applyBrand();
+        applyBrand(); // Apply brand AFTER settings are loaded from Firebase
         alert('Saved!');
         nav('settings',navBtn('Settings'));
       } catch (error) {
@@ -1492,7 +1501,7 @@ async function saveSettings(){
     try {
       await appDataRef.child('settings').set(updatedSettings);
       await loadAllAppDataFromFirebase(); // Reload data after update
-      applyBrand();
+      applyBrand(); // Apply brand AFTER settings are loaded from Firebase
       alert('Saved!');
       nav('settings',navBtn('Settings'));
     } catch (error) {
