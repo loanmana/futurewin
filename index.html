@@ -1367,6 +1367,7 @@ function addCustomer(){
   customers.push({id:uid(),no:nextCustNo(),joined:today(),group:cGroup.value,title:cTitle.value,full:cFull.value.trim(),other:cOther.value,nic:normNic(cNic.value),
     phone:cPhone.value.trim(),email:cEmail.value,map:cMap.value,addr:cAddr.value,dob:cDob.value,gender:cGender.value,marital:cMar.value});
   save();nav('customers',navBtn('Customers'));
+}
 </script>
 </body>
 </html>
