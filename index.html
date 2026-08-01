@@ -268,7 +268,8 @@ async function loadAllAppDataFromFirebase() {
     payments = data?.payments ? Object.values(data.payments) : [];
     
     // IMPORTANT: settings should be treated as an object, not an array of objects
-    settings = data?.settings || {company:'Loan Management System',address:'',phone:'',logo:''}; // Fallback default
+    // Fallback to default if no settings found in Firebase
+    settings = data?.settings || {company:'Loan Management System',address:'',phone:'',logo:''}; 
     
     console.log("Settings loaded from Firebase:", settings);
 
@@ -314,6 +315,7 @@ async function bootApp(){
 }
 
 function applyBrand(){
+  // console.log("Applying brand with settings:", settings); // Debugging
   sideCompany.textContent=settings.company;
   loginCompany.textContent=settings.company;
   sideLogo.src=settings.logo||'';
@@ -679,11 +681,8 @@ async function delCustomer(id){
   try {
     const lids = cl.map(l => l.id);
     // Delete payments related to these loans
-    for (const lid of lids) {
-        const paymentsToDelete = payments.filter(p => p.loanId === lid);
-        for (const p of paymentsToDelete) {
-            await appDataRef.child('payments').child(p.id).remove();
-        }
+    for (const p of payments.filter(p_item => lids.includes(p_item.loanId))) {
+      await appDataRef.child('payments').child(p.id).remove();
     }
     // Delete loans
     for (const lid of lids) {
@@ -1647,14 +1646,29 @@ function nicCheck(){
 // Initial call to applyBrand() when the script loads, before Firebase has fully initialized.
 // This ensures default branding is shown immediately.
 document.addEventListener('DOMContentLoaded', () => {
-    applyBrand();
+    // This initial call will use the hardcoded default settings, or whatever is fetched quickly.
+    // The onAuthStateChanged listener will then fetch and apply the saved settings from Firebase.
+    applyBrand(); 
 
-    // Add event listener for 'Enter' key on password field
-    const liPassInput = document.getElementById('liPass');
-    if (liPassInput) {
-        liPassInput.addEventListener('keydown', (event) => {
+    // Add event listener for 'Enter' key on username and password fields
+    const liUser = document.getElementById('liUser');
+    const liPass = document.getElementById('liPass');
+    
+    if (liUser) {
+        liUser.addEventListener('keydown', (event) => {
             if (event.key === 'Enter' || event.keyCode === 13) {
                 event.preventDefault(); // Prevent default form submission behavior
+                console.log('Enter key pressed on username field, attempting login.');
+                login();
+            }
+        });
+    }
+
+    if (liPass) {
+        liPass.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.keyCode === 13) {
+                event.preventDefault(); // Prevent default form submission behavior
+                console.log('Enter key pressed on password field, attempting login.');
                 login();
             }
         });
