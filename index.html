@@ -208,22 +208,25 @@ async function signup(){
     await user.updateProfile({ displayName: n }); // Set display name in Firebase Auth
 
     // Check if this is the very first user being created in the system
+    // Get current user count
     const allUsersSnap = await usersDbRef.once('value');
     const firstUser = allUsersSnap.numChildren() === 0;
 
     const role = firstUser ? 'Admin' : 'Officer';
     const limit = firstUser ? 999999999 : 0;
+    const status = firstUser ? 'approved' : 'pending'; // New: status is 'pending' for non-first users
 
     // Store additional user details in Firebase Realtime Database
     await usersDbRef.child(user.uid).set({
       name: n,
       username: u, // Storing email as username for consistency with login input
       role: role,
-      limit: limit
+      limit: limit,
+      status: status // Save the status
     });
     
     await syncUsersFromFirebase(); // Refresh local users array
-    alert(firstUser ? 'Admin account created! Please login.' : 'Account created (Officer). Please login.');
+    alert(firstUser ? 'Admin account created! Please login.' : 'Account created. Please wait for Admin approval.'); // Update alert message
     toggleAuth(0); // Switch back to login form
   } catch (error) {
     alert('Signup Error: ' + error.message);
@@ -343,10 +346,17 @@ firebase.auth().onAuthStateChanged(async (user) => {
       const dbUser = dbUserSnap.val();
 
       if (dbUser) {
-        // Combine Firebase Auth and Database data for the current user object
+        if (dbUser.status === 'pending') { // Check for pending status
+          await firebase.auth().signOut();
+          alert("Your account is pending approval from an Admin. Please wait.");
+          loginScreen.classList.remove('hidden');
+          app.classList.add('hidden');
+          return; // Stop execution here
+        }
+
         cur = { ...dbUser, uid: user.uid, email: user.email };
-        await syncUsersFromFirebase(); // Populate local users array with all users
-        bootApp(); // Call a new function to boot the application UI
+        await syncUsersFromFirebase();
+        bootApp();
       } else {
         // User exists in Auth but not in DB - log them out
         await firebase.auth().signOut();
@@ -1178,7 +1188,7 @@ function printReceipt(pid){
     <tr><td>Outstanding Balance:</td><td style="text-align:right">${fmt(l.totalPayable-l.paid)}</td></tr>
     ${ar>0?`<tr><td style="color:#dc2626"><b>⚠️ ARREARS:</b></td><td style="text-align:right"><b style="color:#dc2626">${fmt(ar)}</b></td></tr>`:''}
     ${nd?`<tr><td><b>Next Payment Date:</b></td><td style="text-align:right"><b style="color:#dc2626">${nd.date}</b></td></tr>
-    <tr><td>Next Installment:</td><td style="text-align:right">${fmt(nd.amount)}</td></tr>`:`<tr><td colspan=2 style="text-align:center;color:#16a34a;padding-top:8px"><b>🎉 LOAN FULLY SETTLED</b></td></tr>`}
+    <tr><td>Next Installment:</b></td><td style="text-align:right">${fmt(nd.amount)}</td></tr>`:`<tr><td colspan=2 style="text-align:center;color:#16a34a;padding-top:8px"><b>🎉 LOAN FULLY SETTLED</b></td></tr>`}
     </table>
     <div style="text-align:center;font-size:11px;color:#777;margin-top:14px;border-top:1px dashed #999;padding-top:8px">Collected by: ${esc(p.by)} • Thank you!</div>
   </div>`;
@@ -1400,12 +1410,29 @@ function runOfficer(){
 /* ============ USERS (Firebase integrated) ============ */
 function pgUsers(){
   const admin=isAdmin();
-  return `<div class="card"><div class="secrow"><h3>System Users</h3>${xlsBtn('tblUsers','users')}</div>
-  <table id="tblUsers"><tr><th>Name</th><th>Username (Email)</th><th>Role</th><th>Approval Limit</th><th></th></tr>
-  ${users.map(u=>`<tr><td><b>${esc(u.name)}</b></td><td>${esc(u.username)}</td>
+  const pendingUsers = users.filter(u => u.status === 'pending');
+  // For approvedUsers, include those with 'approved' status or no status (implying legacy approved)
+  const approvedUsers = users.filter(u => u.status === 'approved' || !u.status);
+
+  let html = '';
+
+  if (admin && pendingUsers.length > 0) {
+    html += `<div class="card"><div class="secrow"><h3>Pending User Approvals (${pendingUsers.length})</h3></div>
+    <table id="tblPendingUsers"><tr><th>Name</th><th>Username (Email)</th><th>Actions</th></tr>
+    ${pendingUsers.map(u=>`<tr><td><b>${esc(u.name)}</b></td><td>${esc(u.username)}</td>
+    <td><button class="btn green sm" onclick="approveUser('${u.id}')">✅ Approve</button>
+    <button class="btn red sm" onclick="rejectUser('${u.id}')">❌ Reject</button></td></tr>`).join('')}</table></div>`;
+  }
+
+  html += `<div class="card"><div class="secrow"><h3>System Users</h3>${xlsBtn('tblUsers','users')}</div>
+  <table id="tblUsers"><tr><th>Name</th><th>Username (Email)</th><th>Role</th><th>Approval Limit</th><th>Status</th><th></th></tr>
+  ${approvedUsers.map(u=>`<tr><td><b>${esc(u.name)}</b></td><td>${esc(u.username)}</td>
   <td>${admin?`<select onchange="setRole('${u.id}',this.value)" style="margin:0"><option ${u.role==='Admin'?'selected':''}>Admin</option><option ${u.role==='Manager'?'selected':''}>Manager</option><option ${u.role==='Officer'?'selected':''}>Officer</option></select>`:u.role}</td>
   <td>${admin?`<input type="number" value="${u.limit||0}" style="width:140px;margin:0" onchange="setLimit('${u.id}',this.value)">`:fmt(u.limit||0)}</td>
+  <td><span class="badge b-${u.status === 'approved' || !u.status ? 'settled' : (u.status === 'pending' ? 'pending' : 'bad')}">${u.status ? u.status.toUpperCase() : 'APPROVED'}</span></td>
   <td>${admin&&cur&&u.id!==cur.uid?`<button class="btn red sm" onclick="delUser('${u.id}')">🗑️</button>`:''}</td></tr>`).join('')}</table></div>`;
+  
+  return html;
 }
 
 async function setRole(id, v){
@@ -1436,6 +1463,39 @@ async function setLimit(id, v){
     alert('Error updating limit: ' + error.message);
   }
 }
+
+async function approveUser(id) {
+  if (!isAdmin()) return alert('❌ Only Admin can approve users.');
+  if (!adminPassOK()) return;
+
+  try {
+    await usersDbRef.child(id).update({ status: 'approved' });
+    await syncUsersFromFirebase();
+    alert('✅ User approved!');
+    nav('users', navBtn('Users')); // Refresh UI
+  } catch (error) {
+    alert('Error approving user: ' + error.message);
+  }
+}
+
+async function rejectUser(id) {
+  if (!isAdmin()) return alert('❌ Only Admin can reject users.');
+  if (!confirm('Are you sure you want to reject and delete this user? This cannot be undone.')) return;
+  if (!adminPassOK()) return;
+
+  try {
+    // Delete user's profile from Realtime DB
+    await usersDbRef.child(id).remove();
+    // Note: To completely delete from Firebase Auth, Admin SDK is needed (server-side).
+    // Client-side can only delete current user's Auth account, not others.
+    await syncUsersFromFirebase();
+    alert('❌ User rejected and profile deleted.');
+    nav('users', navBtn('Users')); // Refresh UI
+  } catch (error) {
+    alert('Error rejecting user: ' + error.message);
+  }
+}
+
 
 async function delUser(id){
   if(!isAdmin())return alert('❌ Only Admin can delete users');
@@ -1654,24 +1714,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const liUser = document.getElementById('liUser');
     const liPass = document.getElementById('liPass');
     
+    // Function to handle Enter key login
+    const handleLoginEnter = (event) => {
+        if (event.key === 'Enter' || event.keyCode === 13) {
+            event.preventDefault(); // Prevent default form submission behavior
+            console.log('Enter key pressed, attempting login.');
+            login();
+        }
+    };
+
     if (liUser) {
-        liUser.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter' || event.keyCode === 13) {
-                event.preventDefault(); // Prevent default form submission behavior
-                console.log('Enter key pressed on username field, attempting login.');
-                login();
-            }
-        });
+        liUser.addEventListener('keydown', handleLoginEnter);
     }
 
     if (liPass) {
-        liPass.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter' || event.keyCode === 13) {
-                event.preventDefault(); // Prevent default form submission behavior
-                console.log('Enter key pressed on password field, attempting login.');
-                login();
-            }
-        });
+        liPass.addEventListener('keydown', handleLoginEnter);
     }
 });
 </script>
