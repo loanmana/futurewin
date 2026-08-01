@@ -1367,7 +1367,17 @@ function addCustomer(){
   customers.push({id:uid(),no:nextCustNo(),joined:today(),group:cGroup.value,title:cTitle.value,full:cFull.value.trim(),other:cOther.value,nic:normNic(cNic.value),
     phone:cPhone.value.trim(),email:cEmail.value,map:cMap.value,addr:cAddr.value,dob:cDob.value,gender:cGender.value,marital:cMar.value});
   save();nav('customers',navBtn('Customers'));
-}
+}// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyBpTYBgYJ05aHew-OpPyKj0cN8NwDZGczs",
+  authDomain: "fwinn-ca9da.firebaseapp.com",
+  databaseURL: "https://fwinn-ca9da-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "fwinn-ca9da",
+  storageBucket: "fwinn-ca9da.firebasestorage.app",
+  messagingSenderId: "907008990874",
+  appId: "1:907008990874:web:6e2dccdb6c76dd0a4f4923",
+  measurementId: "G-PSVBJRVT7B"
+};
 </script>
 </body>
 </html>
