@@ -65,7 +65,7 @@ h3.sec{color:var(--p);margin-bottom:12px;font-size:16px}
   <div class="loginBox">
     <img id="loginLogo" src="" alt="" onerror="this.style.display='none'">
     <h2 id="loginCompany">Loan Management System</h2>
-    <p>Sign in to continue</p>
+    <p id="loginMessage">Sign in to continue</p>
     <div id="loginForm">
       <label>Username (Email)</label><input id="liUser">
       <label>Password</label><input id="liPass" type="password">
@@ -191,6 +191,10 @@ firebase.initializeApp(firebaseConfig);
 
 // Firebase Auth State Listener
 firebase.auth().onAuthStateChanged(async (user) => {
+  const loginMessage = document.getElementById('loginMessage');
+  const loginScreen = document.getElementById('loginScreen');
+  const app = document.getElementById('app');
+
   if (user) {
     // User is signed in. Fetch their full profile from Realtime DB.
     try {
@@ -198,7 +202,21 @@ firebase.auth().onAuthStateChanged(async (user) => {
       const dbUser = dbUserSnap.val();
 
       if (dbUser) {
-        // Combine Firebase Auth and Database data for the current user object
+        if (dbUser.status === 'pending') {
+          loginMessage.textContent = "Your account is awaiting admin approval.";
+          loginScreen.classList.remove('hidden');
+          app.classList.add('hidden');
+          await firebase.auth().signOut(); // Force sign out to prevent partial access
+          return;
+        } else if (dbUser.status === 'rejected') {
+          loginMessage.textContent = "Your account has been rejected by an administrator. Please contact support.";
+          loginScreen.classList.remove('hidden');
+          app.classList.add('hidden');
+          await firebase.auth().signOut(); // Force sign out
+          return;
+        }
+
+        // If status is approved or not set (implying approved if it's an existing user without status field)
         cur = { ...dbUser, uid: user.uid, email: user.email };
         db.s('session', cur); // Update local session with fresh data
         await syncUsersFromFirebase(); // Populate local users array with all users
@@ -207,13 +225,13 @@ firebase.auth().onAuthStateChanged(async (user) => {
         // User exists in Auth but not in DB - log them out
         await firebase.auth().signOut();
         console.error("User profile missing in Realtime DB for UID:", user.uid);
-        alert("Your user profile is incomplete. Please contact support.");
+        loginMessage.textContent = "Your user profile is incomplete. Please contact support.";
         loginScreen.classList.remove('hidden');
         app.classList.add('hidden');
       }
     } catch (error) {
       console.error("Error fetching user profile from Firebase DB:", error);
-      alert("Failed to load user profile. Please try again.");
+      loginMessage.textContent = "Failed to load user profile. Please try again.";
       await firebase.auth().signOut(); // Force sign out on error
       loginScreen.classList.remove('hidden');
       app.classList.add('hidden');
@@ -222,6 +240,7 @@ firebase.auth().onAuthStateChanged(async (user) => {
     // No user is signed in. Show login screen.
     cur = null;
     db.s('session', null);
+    loginMessage.textContent = "Sign in to continue"; // Reset message
     loginScreen.classList.remove('hidden');
     app.classList.add('hidden');
   }
@@ -242,21 +261,27 @@ async function signup(){
     // Check if this is the very first user being created in the system
     const usersRef = firebase.database().ref('users');
     const allUsersSnap = await usersRef.once('value');
-    const firstUser = allUsersSnap.numChildren() === 0;
+    const isFirstUser = allUsersSnap.numChildren() === 0;
 
-    const role = firstUser ? 'Admin' : 'Officer';
-    const limit = firstUser ? 999999999 : 0;
+    const role = isFirstUser ? 'Admin' : 'Officer';
+    const status = isFirstUser ? 'approved' : 'pending'; // New users are pending, first user is approved
+    const limit = isFirstUser ? 999999999 : 0;
 
     // Store additional user details in Firebase Realtime Database
     await usersRef.child(user.uid).set({
       name: n,
       username: u, // Storing email as username for consistency with login input
       role: role,
+      status: status, // Add status field
       limit: limit
     });
     
     await syncUsersFromFirebase(); // Refresh local users array
-    alert(firstUser ? 'Admin account created! Please login.' : 'Account created (Officer). Please login.');
+    if (isFirstUser) {
+        alert('Admin account created and approved! Please login.');
+    } else {
+        alert('Account created! Your account is pending admin approval. Please wait to log in.');
+    }
     toggleAuth(0); // Switch back to login form
   } catch (error) {
     alert('Signup Error: ' + error.message);
@@ -303,8 +328,11 @@ function applyBrand(){
 // Simplified adminPassOK for client-side only. For actual security, re-authentication or server-side checks are needed.
 function adminPassOK(){
   if (cur && cur.role === 'Admin') {
-    const p = prompt('🔐 Confirm YOUR Admin password: (enter anything to confirm)'); // For demonstration, just needs non-null input
-    return p !== null; // True if user enters something, false if they click cancel
+    // In a real application, this should involve re-authenticating the admin
+    // or making a server-side call to verify credentials.
+    // For this client-side demo, we'll just ask for *any* non-empty input.
+    const p = prompt('🔐 Confirm YOUR Admin password: (enter anything to confirm)'); 
+    return p !== null && p.trim() !== ''; // True if user enters something, false if they click cancel or leave empty
   }
   alert('❌ You must be an Admin to perform this action.');
   return false;
@@ -1160,13 +1188,84 @@ function runOfficer(){
 /* ============ USERS (Firebase integrated) ============ */
 function pgUsers(){
   const admin=isAdmin();
-  return `<div class="card"><div class="secrow"><h3>System Users</h3>${xlsBtn('tblUsers','users')}</div>
-  <table id="tblUsers"><tr><th>Name</th><th>Username (Email)</th><th>Role</th><th>Approval Limit</th><th></th></tr>
-  ${users.map(u=>`<tr><td><b>${esc(u.name)}</b></td><td>${esc(u.username)}</td>
-  <td>${admin?`<select onchange="setRole('${u.id}',this.value)" style="margin:0"><option ${u.role==='Admin'?'selected':''}>Admin</option><option ${u.role==='Manager'?'selected':''}>Manager</option><option ${u.role==='Officer'?'selected':''}>Officer</option></select>`:u.role}</td>
-  <td>${admin?`<input type="number" value="${u.limit||0}" style="width:140px;margin:0" onchange="setLimit('${u.id}',this.value)">`:fmt(u.limit||0)}</td>
-  <td>${admin&&cur&&u.id!==cur.uid?`<button class="btn red sm" onclick="delUser('${u.id}')">🗑️</button>`:''}</td></tr>`).join('')}</table></div>`;
+  const pendingUsers = users.filter(u => u.status === 'pending');
+  const approvedUsers = users.filter(u => u.status !== 'pending'); // Include rejected or missing status as regular for this view
+
+  let html = '';
+
+  if (admin && pendingUsers.length > 0) {
+    html += `<div class="card"><div class="secrow"><h3>Pending User Approvals (${pendingUsers.length})</h3></div>
+    <table id="tblPendingUsers">
+        <tr>
+            <th>Name</th>
+            <th>Username (Email)</th>
+            <th>Proposed Role</th>
+            <th>Actions</th>
+        </tr>
+        ${pendingUsers.map(u => `
+            <tr>
+                <td><b>${esc(u.name)}</b></td>
+                <td>${esc(u.username)}</td>
+                <td><span class="badge b-pending">${esc(u.role || 'Officer')}</span></td>
+                <td>
+                    <button class="btn green sm" onclick="approveUser('${u.id}')">✅ Approve</button>
+                    <button class="btn red sm" onclick="rejectUser('${u.id}')">❌ Reject</button>
+                </td>
+            </tr>
+        `).join('')}
+    </table></div>`;
+  }
+
+  html += `<div class="card"><div class="secrow"><h3>System Users (${approvedUsers.length})</h3>${xlsBtn('tblUsers','users')}</div>
+  <table id="tblUsers"><tr><th>Name</th><th>Username (Email)</th><th>Role</th><th>Approval Limit</th><th>Status</th><th>Actions</th></tr>
+  ${approvedUsers.map(u=>`<tr><td><b>${esc(u.name)}</b></td><td>${esc(u.username)}</td>
+  <td>${admin?`<select onchange="setRole('${u.id}',this.value)" style="margin:0" ${u.id===cur.uid?'disabled':''}>
+    <option ${u.role==='Admin'?'selected':''}>Admin</option>
+    <option ${u.role==='Manager'?'selected':''}>Manager</option>
+    <option ${u.role==='Officer'?'selected':''}>Officer</option>
+  </select>`:u.role}</td>
+  <td>${admin?`<input type="number" value="${u.limit||0}" style="width:140px;margin:0" onchange="setLimit('${u.id}',this.value)" ${u.id===cur.uid?'disabled':''}>`:fmt(u.limit||0)}</td>
+  <td><span class="badge b-${u.status === 'approved' ? 'active' : 'pending'}">${(u.status || 'approved').toUpperCase()}</span></td>
+  <td>${admin && cur && u.id !== cur.uid?`<button class="btn red sm" onclick="delUser('${u.id}')">🗑️</button>`:''}</td></tr>`).join('')}</table></div>`;
+
+  return html;
 }
+
+async function approveUser(uid) {
+    if (!isAdmin()) return alert('❌ Only Admin can approve users');
+    if (!adminPassOK()) return;
+
+    try {
+        await firebase.database().ref('users/' + uid).update({ status: 'approved' });
+        await syncUsersFromFirebase();
+        alert('✅ User approved!');
+        nav('users', navBtn('Users'));
+    } catch (error) {
+        alert('Error approving user: ' + error.message);
+    }
+}
+
+async function rejectUser(uid) {
+    if (!isAdmin()) return alert('❌ Only Admin can reject users');
+    if (!adminPassOK()) return;
+
+    if (!confirm('Are you sure you want to reject this user? Their account will be removed.')) return;
+
+    try {
+        // Option 1: Set status to 'rejected' (user can then see they are rejected)
+        // await firebase.database().ref('users/' + uid).update({ status: 'rejected' });
+        
+        // Option 2: Delete user profile from DB (user will see incomplete profile message)
+        await firebase.database().ref('users/' + uid).remove();
+        
+        await syncUsersFromFirebase();
+        alert('❌ User rejected and profile removed from database.');
+        nav('users', navBtn('Users'));
+    } catch (error) {
+        alert('Error rejecting user: ' + error.message);
+    }
+}
+
 
 async function setRole(id, v){
   if(!isAdmin())return;
