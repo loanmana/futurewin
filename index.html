@@ -124,60 +124,20 @@ const firebaseConfig = {
 };
 
 /* ============ STORAGE ============ */
-// Initialize Firebase
-firebase.initializeApp(firebaseConfig);
+const db={g:(k,d)=>JSON.parse(localStorage.getItem('lms_'+k))??d, s:(k,v)=>localStorage.setItem('lms_'+k,JSON.stringify(v))};
 
-// Firebase Database References
-const usersDbRef = firebase.database().ref('users'); // Reference to '/users' node (for authentication data)
-const appDataRef = firebase.database().ref('appData'); // Central node for all application data (groups, customers, etc.)
+// Users array will now be populated from Firebase
+let users = [];
+let groups=db.g('groups',[]),customers=db.g('customers',[]),
+    products=db.g('products',[]),loans=db.g('loans',[]),payments=db.g('payments',[]),
+    settings=db.g('settings',{company:'My Company',address:'',phone:'',logo:''});
 
-// Application data variables - these will be populated from Firebase
-let users = []; // Already managed by Firebase
-let groups = [];
-let customers = [];
-let products = [];
-let loans = [];
-let payments = [];
-let settings = {company:'Loan Management System',address:'',phone:'',logo:''}; // Set a clear default for initial load
+let cur=db.g('session',null); // Current user from local storage (will be updated by Firebase listener)
 
-let cur = null; // Current user, populated by Firebase auth listener
-
-// This uid function now generates Firebase-compatible unique IDs
-const uid = () => appDataRef.push().key;
-
-const fmt=n=>'Rs. '+Number(n||0).toLocaleString('en-LK',{minimumFractionDigits:2,maximumFractionDigits:2});
-const today=()=>new Date().toISOString().slice(0,10);
-const esc=s=>(s??'').toString().replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
-const isAdmin=()=>cur && cur.role === 'Admin';
-const normNic=s=>(s||'').toString().replace(/\s/g,'').toUpperCase();
-const DAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-
-// Helper to generate next customer number - this will be run AFTER customers are loaded from Firebase
-const nextCustNo=()=>{
-  let mx=0;
-  customers.forEach(c=>{
-    const m=/^CUS(\d+)$/.exec(c.no||'');
-    if(m)mx=Math.max(mx,+m[1]);
-  });
-  return 'CUS'+String(mx+1).padStart(4,'0');
-};
-
-/* ============ EXCEL ============ */
-function exportXls(tableId,name){
-  const t=document.getElementById(tableId);if(!t)return alert('Nothing to export');
-  const clone=t.cloneNode(true);
-  clone.querySelectorAll('button,select,input').forEach(e=>e.remove());
-  const html=`<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"></head><body><table border="1">${clone.innerHTML}</table></body></html>`;
-  const blob=new Blob(['\ufeff'+html],{type:'application/vnd.ms-excel'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name+'-'+today()+'.xls';a.click();
-}
-const xlsBtn=(id,name)=>`<button class="btn xl sm" onclick="exportXls('${id}','${name}')">📗 Excel</button>`;
-
-/* ============ AUTH (Firebase) ============ */
-// Function to sync users from Firebase Realtime Database
+// New function to sync users from Firebase Realtime Database
 async function syncUsersFromFirebase() {
   try {
-    const snapshot = await usersDbRef.once('value');
+    const snapshot = await firebase.database().ref('users').once('value');
     const firebaseUsers = snapshot.val();
     users = []; // Clear existing local users
     if (firebaseUsers) {
@@ -193,13 +153,85 @@ async function syncUsersFromFirebase() {
   }
 }
 
+// Function to save non-user data to local storage. Users are managed via Firebase.
+const save=()=>{
+  db.s('groups',groups);
+  db.s('customers',customers);
+  db.s('products',products);
+  db.s('loans',loans);
+  db.s('payments',payments);
+  db.s('settings',settings);
+};
+
+const uid=()=>Date.now()+''+Math.floor(Math.random()*999);
+const fmt=n=>'Rs. '+Number(n||0).toLocaleString('en-LK',{minimumFractionDigits:2,maximumFractionDigits:2});
+const today=()=>new Date().toISOString().slice(0,10);
+const esc=s=>(s??'').toString().replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+const isAdmin=()=>cur&&cur.role==='Admin';
+const normNic=s=>(s||'').toString().replace(/\s/g,'').toUpperCase();
+const DAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+(function(){let ch=false;customers.forEach((c,i)=>{if(!c.no){c.no='CUS'+String(i+1).padStart(4,'0');ch=true}if(!c.joined){c.joined=today();ch=true}});if(ch)save()})();
+const nextCustNo=()=>{let mx=0;customers.forEach(c=>{const m=/^CUS(\d+)$/.exec(c.no||'');if(m)mx=Math.max(mx,+m[1])});return 'CUS'+String(mx+1).padStart(4,'0')};
+
+/* ============ EXCEL ============ */
+function exportXls(tableId,name){
+  const t=document.getElementById(tableId);if(!t)return alert('Nothing to export');
+  const clone=t.cloneNode(true);
+  clone.querySelectorAll('button,select,input').forEach(e=>e.remove());
+  const html=`<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"></head><body><table border="1">${clone.innerHTML}</table></body></html>`;
+  const blob=new Blob(['\ufeff'+html],{type:'application/vnd.ms-excel'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name+'-'+today()+'.xls';a.click();
+}
+const xlsBtn=(id,name)=>`<button class="btn xl sm" onclick="exportXls('${id}','${name}')">📗 Excel</button>`;
+
+/* ============ AUTH (Firebase) ============ */
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+
+// Firebase Auth State Listener
+firebase.auth().onAuthStateChanged(async (user) => {
+  if (user) {
+    // User is signed in. Fetch their full profile from Realtime DB.
+    try {
+      const dbUserSnap = await firebase.database().ref('users/' + user.uid).once('value');
+      const dbUser = dbUserSnap.val();
+
+      if (dbUser) {
+        // Combine Firebase Auth and Database data for the current user object
+        cur = { ...dbUser, uid: user.uid, email: user.email };
+        db.s('session', cur); // Update local session with fresh data
+        await syncUsersFromFirebase(); // Populate local users array with all users
+        bootApp(); // Call a new function to boot the application UI
+      } else {
+        // User exists in Auth but not in DB - log them out
+        await firebase.auth().signOut();
+        console.error("User profile missing in Realtime DB for UID:", user.uid);
+        alert("Your user profile is incomplete. Please contact support.");
+        loginScreen.classList.remove('hidden');
+        app.classList.add('hidden');
+      }
+    } catch (error) {
+      console.error("Error fetching user profile from Firebase DB:", error);
+      alert("Failed to load user profile. Please try again.");
+      await firebase.auth().signOut(); // Force sign out on error
+      loginScreen.classList.remove('hidden');
+      app.classList.add('hidden');
+    }
+  } else {
+    // No user is signed in. Show login screen.
+    cur = null;
+    db.s('session', null);
+    loginScreen.classList.remove('hidden');
+    app.classList.add('hidden');
+  }
+});
+
 // This function now just handles toggling the login/signup form visibility
 function toggleAuth(s){document.getElementById('loginForm').classList.toggle('hidden',s);document.getElementById('signupForm').classList.toggle('hidden',!s)}
 
 async function signup(){
-  const n=suName.value.trim(); // Full Name
-  const u=suUser.value.trim(); // Username (Email)
-  const p=suPass.value;        // Password
+  const n=suName.value.trim(),u=suUser.value.trim(),p=suPass.value; // u is used as email for Firebase Auth
   if(!n||!u||!p)return alert('Fill all fields');
 
   try {
@@ -208,25 +240,23 @@ async function signup(){
     await user.updateProfile({ displayName: n }); // Set display name in Firebase Auth
 
     // Check if this is the very first user being created in the system
-    // Get current user count
-    const allUsersSnap = await usersDbRef.once('value');
+    const usersRef = firebase.database().ref('users');
+    const allUsersSnap = await usersRef.once('value');
     const firstUser = allUsersSnap.numChildren() === 0;
 
     const role = firstUser ? 'Admin' : 'Officer';
     const limit = firstUser ? 999999999 : 0;
-    const status = firstUser ? 'approved' : 'pending'; // New: status is 'pending' for non-first users
 
     // Store additional user details in Firebase Realtime Database
-    await usersDbRef.child(user.uid).set({
+    await usersRef.child(user.uid).set({
       name: n,
       username: u, // Storing email as username for consistency with login input
       role: role,
-      limit: limit,
-      status: status // Save the status
+      limit: limit
     });
     
     await syncUsersFromFirebase(); // Refresh local users array
-    alert(firstUser ? 'Admin account created! Please login.' : 'Account created. Please wait for Admin approval.'); // Update alert message
+    alert(firstUser ? 'Admin account created! Please login.' : 'Account created (Officer). Please login.');
     toggleAuth(0); // Switch back to login form
   } catch (error) {
     alert('Signup Error: ' + error.message);
@@ -249,82 +279,25 @@ async function login(){
 async function logout(){
   try {
     await firebase.auth().signOut();
-    liUser.value = ''; // Clear username field
-    liPass.value = ''; // Clear password field
-    // onAuthStateChanged listener will handle redirecting to login screen and applying brand
+    // onAuthStateChanged listener will handle redirecting to login screen
   } catch (error) {
     alert('Logout Error: ' + error.message);
   }
 }
 
-// Function to load all application data (groups, customers, etc.) from Firebase
-async function loadAllAppDataFromFirebase() {
-  try {
-    const snapshot = await appDataRef.once('value');
-    const data = snapshot.val();
-
-    // Populate global arrays with data from Firebase
-    groups = data?.groups ? Object.values(data.groups) : [];
-    customers = data?.customers ? Object.values(data.customers) : [];
-    products = data?.products ? Object.values(data.products) : [];
-    loans = data?.loans ? Object.values(data.loans) : [];
-    payments = data?.payments ? Object.values(data.payments) : [];
-    
-    // IMPORTANT: settings should be treated as an object, not an array of objects
-    // Fallback to default if no settings found in Firebase
-    settings = data?.settings || {company:'Loan Management System',address:'',phone:'',logo:''}; 
-    
-    console.log("Settings loaded from Firebase:", settings);
-
-    // Ensure customer numbers and join dates are set for any legacy local storage customers
-    // This part ensures data consistency after loading from Firebase
-    let customersChanged = false;
-    customers.forEach((c) => {
-        if (!c.no || !c.no.startsWith('CUS')) {
-            c.no = nextCustNo(); // Assign a new 'CUS' number if missing
-            customersChanged = true;
-        }
-        if (!c.joined) {
-            c.joined = today(); // Assign today's date if missing
-            customersChanged = true;
-        }
-    });
-
-    if (customersChanged) {
-        // If any customer data was modified, save it back to Firebase
-        const customersObject = customers.reduce((obj, c) => ({ ...obj, [c.id]: c }), {});
-        await appDataRef.child('customers').set(customersObject);
-    }
-
-  } catch (error) {
-    console.error("Error loading application data from Firebase:", error);
-    // If a user logs in and there's no initial data, this might show an error.
-    // For a new system, it's normal for data to be empty.
-    // Consider if this alert should always show or only for certain types of errors.
-    // alert("Failed to load application data from server. Please refresh.");
-  }
-}
-
 // Renamed boot() to bootApp() to avoid confusion with the initial auth state check
-async function bootApp(){
+function bootApp(){
   loginScreen.classList.add('hidden');
   app.classList.remove('hidden');
   userChip.textContent=cur.name+' ('+cur.role+')';
-  
-  await loadAllAppDataFromFirebase(); // Ensure settings are loaded
-  applyBrand(); // Apply the freshly loaded settings to the UI
-  console.log("App booted with settings:", settings);
+  applyBrand();
   nav('dashboard',document.querySelector('aside button'));
 }
 
 function applyBrand(){
-  // console.log("Applying brand with settings:", settings); // Debugging
-  sideCompany.textContent=settings.company;
-  loginCompany.textContent=settings.company;
-  sideLogo.src=settings.logo||'';
-  loginLogo.src=settings.logo||'';
-  sideLogo.style.display=settings.logo?'':'none';
-  loginLogo.style.display=settings.logo?'':'none';
+  sideCompany.textContent=settings.company;loginCompany.textContent=settings.company;
+  sideLogo.src=settings.logo||'';loginLogo.src=settings.logo||'';
+  sideLogo.style.display=settings.logo?'':'none';loginLogo.style.display=settings.logo?'':'none';
 }
 
 // Simplified adminPassOK for client-side only. For actual security, re-authentication or server-side checks are needed.
@@ -336,59 +309,6 @@ function adminPassOK(){
   alert('❌ You must be an Admin to perform this action.');
   return false;
 }
-
-// Firebase Auth State Listener
-firebase.auth().onAuthStateChanged(async (user) => {
-  if (user) {
-    // User is signed in. Fetch their full profile from Realtime DB.
-    try {
-      const dbUserSnap = await usersDbRef.child(user.uid).once('value');
-      const dbUser = dbUserSnap.val();
-
-      if (dbUser) {
-        if (dbUser.status === 'pending') { // Check for pending status
-          await firebase.auth().signOut();
-          alert("Your account is pending approval from an Admin. Please wait.");
-          loginScreen.classList.remove('hidden');
-          app.classList.add('hidden');
-          return; // Stop execution here
-        }
-
-        cur = { ...dbUser, uid: user.uid, email: user.email };
-        await syncUsersFromFirebase();
-        bootApp();
-      } else {
-        // User exists in Auth but not in DB - log them out
-        await firebase.auth().signOut();
-        console.error("User profile missing in Realtime DB for UID:", user.uid);
-        alert("Your user profile is incomplete. Please contact support.");
-        loginScreen.classList.remove('hidden');
-        app.classList.add('hidden');
-      }
-    } catch (error) {
-      console.error("Error fetching user profile from Firebase DB:", error);
-      alert("Failed to load user profile. Please try again.");
-      await firebase.auth().signOut(); // Force sign out on error
-      loginScreen.classList.remove('hidden');
-      app.classList.add('hidden');
-    }
-  } else {
-    // No user is signed in. Show login screen.
-    cur = null;
-    loginScreen.classList.remove('hidden');
-    app.classList.add('hidden');
-    
-    // On logout or initial load without login, ensure latest settings are displayed
-    try {
-        const settingsSnapshot = await appDataRef.child('settings').once('value');
-        settings = settingsSnapshot.val() || {company:'Loan Management System',address:'',phone:'',logo:''};
-    } catch (error) {
-        console.warn("Could not load settings for login screen:", error);
-        settings = {company:'Loan Management System',address:'',phone:'',logo:''}; // Fallback to default
-    }
-    applyBrand(); // Apply fetched/default brand to login screen
-  }
-});
 
 /* ============ NAV ============ */
 function nav(page,btn){
@@ -508,26 +428,16 @@ function viewCIF(id){
   return `<tr><td>${p.receiptNo}</td><td>${p.date}</td><td>${l?l.no:''}</td><td>${fmt(p.amount)}</td><td>${esc(p.method||'Cash')}</td><td>${esc(p.remark||'')}</td><td>${esc(p.by)}</td></tr>`}).join('')||'<tr><td colspan=7>No payments</td></tr>'}</table></div>`;
   cifProfile.scrollIntoView({behavior:'smooth'});
 }
-async function upDoc(cid,inp){
+function upDoc(cid,inp){
   const f=inp.files[0];if(!f)return;
   if(f.size>800*1024)return alert('❌ File too big! Max 800KB.');
   const r=new FileReader();
-  r.onload=async e=>{ // Made async to await Firebase calls
+  r.onload=e=>{
     const c=customers.find(x=>x.id===cid);if(!c)return;
     c.docs=c.docs||[];
-    const newDocId = uid(); // Generate a unique ID for the document
-    c.docs.push({id:newDocId, name:f.name,type:f.type,data:e.target.result,date:today(),by:cur.name});
-    
-    try{
-        await appDataRef.child('customers').child(cid).update({ docs: c.docs });
-        await loadAllAppDataFromFirebase(); // Reload data after update
-        alert('✅ Document uploaded!');
-        viewCIF(cid);
-    }catch(err){
-        console.error("Error uploading document to Firebase:", err);
-        c.docs.pop(); // Remove from local if Firebase save failed
-        alert('❌ Failed to upload document. Possible storage issue or database rule violation.');
-    }
+    c.docs.push({id:uid(),name:f.name,type:f.type,data:e.target.result,date:today(),by:cur.name});
+    try{save()}catch(err){c.docs.pop();return alert('❌ Storage full! Delete old documents.')}
+    alert('✅ Document uploaded!');viewCIF(cid);
   };
   r.readAsDataURL(f);
 }
@@ -538,19 +448,12 @@ function openDoc(cid,did){
     ?'<img src="'+d.data+'" style="max-width:100%">'
     :'<iframe src="'+d.data+'" style="width:100%;height:98vh;border:none"></iframe>'));
 }
-async function delDoc(cid,did){
+function delDoc(cid,did){
   if(!isAdmin())return alert('❌ Only Admin can delete documents');
   if(!confirm('Delete this document?'))return;
   const c=customers.find(x=>x.id===cid);if(!c)return;
   c.docs=(c.docs||[]).filter(x=>x.id!==did);
-  try {
-    await appDataRef.child('customers').child(cid).update({ docs: c.docs });
-    await loadAllAppDataFromFirebase(); // Reload data after update
-    viewCIF(cid);
-  } catch (error) {
-    console.error("Error deleting document from Firebase:", error);
-    alert("Failed to delete document: " + error.message);
-  }
+  save();viewCIF(cid);
 }
 /* ======== PART 1 END - PART 2 MEKATA YATIN PASTE KARANNA ======== */
 /* ============ GROUPS ============ */
@@ -564,121 +467,54 @@ function pgGroups(){
   ${groups.map(g=>`<tr><td><b>${esc(g.name)}</b></td><td>${esc(g.desc)}</td><td>${customers.filter(c=>c.group===g.id).length}</td>
   <td>${isAdmin()?`<button class="btn red sm" onclick="delGroup('${g.id}')">🗑️ Delete</button>`:''}</td></tr>`).join('')||'<tr><td colspan=4>No groups</td></tr>'}</table></div>`;
 }
-async function addGroup(){
-  if(!grName.value.trim())return alert('Enter name');
-  const newId = uid();
-  const newGroup = {id:newId, name:grName.value.trim(), desc:grDesc.value};
-  try {
-    await appDataRef.child('groups').child(newId).set(newGroup);
-    await loadAllAppDataFromFirebase(); // Reload data after update
-    nav('groups', navBtn('Groups'));
-  } catch (error) {
-    console.error("Error adding group to Firebase:", error);
-    alert("Failed to add group: " + error.message);
-  }
-}
-async function delGroup(id){
+function addGroup(){if(!grName.value.trim())return alert('Enter name');groups.push({id:uid(),name:grName.value.trim(),desc:grDesc.value});save();nav('groups',navBtn('Groups'))}
+function delGroup(id){
   if(!isAdmin())return alert('❌ Only Admin can delete');
   const g=groups.find(x=>x.id===id);if(!g)return;
   const mc=customers.filter(c=>c.group===id).length;
   if(!confirm('Delete group "'+g.name+'"?'+(mc?'\n('+mc+' customers unlink wenawa)':'')))return;
-  
-  // Unlink customers from this group first
-  const customersInGroup = customers.filter(c => c.group === id);
-  for (const c of customersInGroup) {
-      c.group = ''; // Set group to empty string
-      await appDataRef.child('customers').child(c.id).update({ group: '' });
-  }
-
-  try {
-    await appDataRef.child('groups').child(id).remove();
-    await loadAllAppDataFromFirebase(); // Reload data after update
-    nav('groups', navBtn('Groups'));
-  } catch (error) {
-    console.error("Error deleting group from Firebase:", error);
-    alert("Failed to delete group: " + error.message);
-  }
+  customers.forEach(c=>{if(c.group===id)c.group=''});
+  groups=groups.filter(x=>x.id!==id);
+  save();nav('groups',navBtn('Groups'));
 }
 
 /* ============ CUSTOMERS ============ */
 function pgCustomers(){
-  const ec=editCid?customers.find(x=>x.id===editCid):null;
-  return `<div class="card"><h3 class="sec">${ec?'✏️ EDIT Customer: '+esc(ec.no)+' - '+esc(ec.full):'Create Customer (Next No: <b>'+nextCustNo()+'</b>)'}</h3><div class="grid g4">
-    <div><label>Group</label><select id="cGroup"><option value="">-- None --</option>${groups.map(g=>`<option value="${g.id}" ${ec&&ec.group===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}</select></div>
-    <div><label>Title</label><select id="cTitle">${['Mr','Mrs','Miss','Rev','Dr'].map(t=>`<option ${ec&&ec.title===t?'selected':''}>${t}</option>`).join('')}</select></div>
-    <div><label>Full Name *</label><input id="cFull" value="${ec?esc(ec.full):''}"></div>
-    <div><label>Other Names</label><input id="cOther" value="${ec?esc(ec.other||''):''}"></div>
-    <div><label>NIC *</label><input id="cNic" value="${ec?esc(ec.nic):''}" oninput="nicCheck()"><div id="nicWarn" style="color:var(--bad);font-size:12px;margin-top:-6px;margin-bottom:8px"></div></div>
-    <div><label>Phone No *</label><input id="cPhone" value="${ec?esc(ec.phone):''}"></div>
-    <div><label>Email</label><input id="cEmail" type="email" value="${ec?esc(ec.email||''):''}"></div>
-    <div><label>Location (Google Map link)</label><input id="cMap" value="${ec?esc(ec.map||''):''}" placeholder="https://maps.google.com/..."></div>
-    <div><label>Address</label><input id="cAddr" value="${ec?esc(ec.addr||''):''}"></div>
-    <div><label>Date of Birth</label><input id="cDob" type="date" value="${ec?esc(ec.dob||''):''}"></div>
-    <div><label>Gender</label><select id="cGender">${['Male','Female'].map(t=>`<option ${ec&&ec.gender===t?'selected':''}>${t}</option>`).join('')}</select></div>
-    <div><label>Marital Status</label><select id="cMar">${['Single','Married','Divorced','Widowed'].map(t=>`<option ${ec&&ec.marital===t?'selected':''}>${t}</option>`).join('')}</select></div>
-    </div>
-    <button class="btn ${ec?'orange':'green'}" onclick="addCustomer()">${ec?'💾 Update Customer':'+ Save Customer'}</button>
-    ${ec?`<button class="btn gray" style="margin-left:8px" onclick="editCid=null;nav('customers',navBtn('Customers'))">✖ Cancel Edit</button>`:''}
-    </div>
+  return `<div class="card"><h3 class="sec">Create Customer (Next No: <b>${nextCustNo()}</b>)</h3><div class="grid g4">
+    <div><label>Group</label><select id="cGroup"><option value="">-- None --</option>${groups.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('')}</select></div>
+    <div><label>Title</label><select id="cTitle"><option>Mr</option><option>Mrs</option><option>Miss</option><option>Rev</option><option>Dr</option></select></div>
+    <div><label>Full Name *</label><input id="cFull"></div>
+    <div><label>Other Names</label><input id="cOther"></div>
+    <div><label>NIC *</label><input id="cNic" oninput="nicCheck()"><div id="nicWarn" style="color:var(--bad);font-size:12px;margin-top:-6px;margin-bottom:8px"></div></div>
+    <div><label>Phone No *</label><input id="cPhone"></div>
+    <div><label>Email</label><input id="cEmail" type="email"></div>
+    <div><label>Location (Google Map link)</label><input id="cMap" placeholder="https://maps.google.com/..."></div>
+    <div><label>Address</label><input id="cAddr"></div>
+    <div><label>Date of Birth</label><input id="cDob" type="date"></div>
+    <div><label>Gender</label><select id="cGender"><option>Male</option><option>Female</option></select></div>
+    <div><label>Marital Status</label><select id="cMar"><option>Single</option><option>Married</option><option>Divorced</option><option>Widowed</option></select></div>
+    </div><button class="btn green" onclick="addCustomer()">+ Save Customer</button></div>
   <div class="card"><div class="secrow"><h3>Customers (${customers.length})</h3>${xlsBtn('tblCust','customers')}</div>
-  <table id="tblCust"><tr><th>Cust No</th><th>Name</th><th>NIC</th><th>Phone</th><th>Group</th><th>Joined</th><th>Map</th><th>Loans</th><th>Actions</th></tr>
+  <table id="tblCust"><tr><th>Cust No</th><th>Name</th><th>NIC</th><th>Phone</th><th>Group</th><th>Joined</th><th>Map</th><th>Loans</th><th></th></tr>
   ${customers.map(c=>{const g=groups.find(x=>x.id===c.group);const ln=loans.filter(l=>l.customerId===c.id&&l.status!=='settled').length;
    return `<tr><td><b>${esc(c.no)}</b></td><td><b>${esc(c.title)}. ${esc(c.full)}</b><br><small>${esc(c.email)}</small></td><td>${esc(c.nic)}</td><td>${esc(c.phone)}</td>
    <td>${g?esc(g.name):'-'}</td><td>${esc(c.joined)}</td><td>${c.map?`<a href="${esc(c.map)}" target="_blank">📍 Map</a>`:'-'}</td>
    <td>${ln?`<span class="badge b-active">${ln} active</span>`:'<span class="badge b-settled">clear</span>'}</td>
-   <td><button class="btn orange sm" onclick="editCustomer('${c.id}')">✏️ Edit</button>
-   ${isAdmin()?`<button class="btn red sm" onclick="delCustomer('${c.id}')">🗑️</button>`:''}</td></tr>`}).join('')||'<tr><td colspan=9>No customers</td></tr>'}</table></div>`;
+   <td>${isAdmin()?`<button class="btn red sm" onclick="delCustomer('${c.id}')">🗑️ Delete</button>`:''}</td></tr>`}).join('')||'<tr><td colspan=9>No customers</td></tr>'}</table></div>`;
 }
-
-/* Edit button - form ekata data load karanawa */
-function editCustomer(id){
-  editCid=id;
-  nav('customers',navBtn('Customers'));
-  window.scrollTo({top:0,behavior:'smooth'});
-}
-
-/* NIC check - edit karaddi thamange NIC eka duplicate kiyala pennanne na */
 function nicCheck(){
-  const dup=customers.find(c=>normNic(c.nic)===normNic(cNic.value)&&cNic.value.trim()&&c.id!==editCid);
+  const dup=customers.find(c=>normNic(c.nic)===normNic(cNic.value)&&cNic.value.trim());
   nicWarn.textContent=dup?'⚠️ NIC already registered to: '+dup.full+' ('+dup.no+')':'';
 }
-
-/* Save - create OR update */
-async function addCustomer(){
+function addCustomer(){
   if(!cFull.value.trim()||!cNic.value.trim()||!cPhone.value.trim())return alert('Full name, NIC & Phone are required');
-  const dup=customers.find(c=>normNic(c.nic)===normNic(cNic.value)&&c.id!==editCid);
+  const dup=customers.find(c=>normNic(c.nic)===normNic(cNic.value));
   if(dup)return alert('❌ DUPLICATE NIC! Already registered to: '+dup.full+' ('+dup.no+')');
-
-  let customerData = {
-    group: cGroup.value, title: cTitle.value, full: cFull.value.trim(), other: cOther.value,
-    nic: normNic(cNic.value), phone: cPhone.value.trim(), email: cEmail.value, map: cMap.value,
-    addr: cAddr.value, dob: cDob.value, gender: cGender.value, marital: cMar.value
-  };
-
-  try {
-    if(editCid){
-      // UPDATE existing customer
-      await appDataRef.child('customers').child(editCid).update(customerData);
-      editCid=null;
-      alert('✅ Customer updated!');
-    } else {
-      // CREATE new customer
-      const newId = uid();
-      customerData.id = newId;
-      customerData.no = nextCustNo();
-      customerData.joined = today();
-      await appDataRef.child('customers').child(newId).set(customerData);
-      alert('✅ Customer created!');
-    }
-    await loadAllAppDataFromFirebase(); // Reload data after update/create
-    nav('customers',navBtn('Customers'));
-  } catch (error) {
-    console.error("Error saving customer to Firebase:", error);
-    alert("Failed to save customer: " + error.message);
-  }
+  customers.push({id:uid(),no:nextCustNo(),joined:today(),group:cGroup.value,title:cTitle.value,full:cFull.value.trim(),other:cOther.value,nic:normNic(cNic.value),
+    phone:cPhone.value.trim(),email:cEmail.value,map:cMap.value,addr:cAddr.value,dob:cDob.value,gender:cGender.value,marital:cMar.value});
+  save();nav('customers',navBtn('Customers'));
 }
-
-async function delCustomer(id){
+function delCustomer(id){
   if(!isAdmin())return alert('❌ Only Admin can delete');
   const c=customers.find(x=>x.id===id);if(!c)return;
   const cl=loans.filter(l=>l.customerId===id);
@@ -687,27 +523,11 @@ async function delCustomer(id){
   if(cl.some(l=>l.status!=='settled'))msg+='\n🔴 WARNING: has UNSETTLED loans!';
   if(!confirm(msg))return;
   if(!adminPassOK())return;
-
-  try {
-    const lids = cl.map(l => l.id);
-    // Delete payments related to these loans
-    for (const p of payments.filter(p_item => lids.includes(p_item.loanId))) {
-      await appDataRef.child('payments').child(p.id).remove();
-    }
-    // Delete loans
-    for (const lid of lids) {
-        await appDataRef.child('loans').child(lid).remove();
-    }
-    // Delete customer
-    await appDataRef.child('customers').child(id).remove();
-
-    await loadAllAppDataFromFirebase(); // Reload data after deletions
-    alert('🗑️ Deleted.');
-    nav('customers',navBtn('Customers'));
-  } catch (error) {
-    console.error("Error deleting customer and related data from Firebase:", error);
-    alert("Failed to delete customer: " + error.message);
-  }
+  const lids=cl.map(l=>l.id);
+  payments=payments.filter(p=>!lids.includes(p.loanId));
+  loans=loans.filter(l=>l.customerId!==id);
+  customers=customers.filter(x=>x.id!==id);
+  save();alert('🗑️ Deleted.');nav('customers',navBtn('Customers'));
 }
 
 /* ============ PRODUCTS ============ */
@@ -727,32 +547,18 @@ function pgProducts(){
   ${products.map(p=>`<tr><td><b>${esc(p.code)}</b></td><td>${esc(p.name)}</td><td>${p.rate}%</td><td>${p.term}</td><td>${p.doc}%</td><td>${fmt(p.other)}</td>
   <td>${isAdmin()?`<button class="btn red sm" onclick="delProduct('${p.id}')">🗑️ Delete</button>`:''}</td></tr>`).join('')||'<tr><td colspan=7>No products</td></tr>'}</table></div>`;
 }
-async function addProduct(){
+function addProduct(){
   if(!pName.value||!pCode.value||!pRate.value||!pTerm.value)return alert('Fill required fields');
-  const newId = uid();
-  const newProduct = {id:newId, name:pName.value, code:pCode.value, rate:+pRate.value, term:+pTerm.value, doc:+pDoc.value||0, other:+pOther.value||0};
-  try {
-    await appDataRef.child('products').child(newId).set(newProduct);
-    await loadAllAppDataFromFirebase(); // Reload data after update
-    nav('products',navBtn('Products'));
-  } catch (error) {
-    console.error("Error adding product to Firebase:", error);
-    alert("Failed to add product: " + error.message);
-  }
+  products.push({id:uid(),name:pName.value,code:pCode.value,rate:+pRate.value,term:+pTerm.value,doc:+pDoc.value||0,other:+pOther.value||0});
+  save();nav('products',navBtn('Products'));
 }
-async function delProduct(id){
+function delProduct(id){
   if(!isAdmin())return alert('❌ Only Admin can delete');
   const p=products.find(x=>x.id===id);if(!p)return;
   const uc=loans.filter(l=>l.productId===id).length;
   if(!confirm('Delete product "'+p.name+'"?'+(uc?'\n⚠️ '+uc+' loan(s) used it (loans NOT deleted).':'')))return;
-  try {
-    await appDataRef.child('products').child(id).remove();
-    await loadAllAppDataFromFirebase(); // Reload data after update
-    nav('products',navBtn('Products'));
-  } catch (error) {
-    console.error("Error deleting product from Firebase:", error);
-    alert("Failed to delete product: " + error.message);
-  }
+  products=products.filter(x=>x.id!==id);
+  save();nav('products',navBtn('Products'));
 }
 
 /* ============ LOAN CALC (% per month + weekly day) ============ */
@@ -837,8 +643,8 @@ function pgLoans(){
     <div><label>Interest Calculation Method *</label><select id="lMethod" onchange="methodPick()">
       <option value="flat">Flat rate</option><option value="rb_rental">Reducing balance - Equal rental</option><option value="rb_capital">Reducing balance - Equal capital</option></select></div>
     <div id="streamBox"><label>Repayment Stream</label><select id="lStream"><option>Regular</option><option>Interest</option><option>Capital</option></select></div>
-    <div id="manDocBox"><label>Document Charge (% of loan)</label><input id="mDoc" type="number" step="0.01" value="0" oninput="prodPick()"></div>
-    <div id="manOtherBox"><label>Other Charges (Rs.)</label><input id="mOther" type="number" value="0" oninput="prodPick()"></div>
+    <div id="manDocBox"><label>Document Charge (%) - manual</label><input id="mDoc" type="number" step="0.01" value="0" oninput="prodPick()"></div>
+    <div id="manOtherBox"><label>Other Charges (Rs.) - manual</label><input id="mOther" type="number" value="0" oninput="prodPick()"></div>
     <div><label>Start / Issue Date</label><input id="lStart" type="date" value="${today()}"></div>
     </div>
     <div class="grid g2" style="margin-bottom:12px">${gBox(1)}${gBox(2)}</div>
@@ -903,27 +709,21 @@ function previewLoan(){
   <button class="btn gray" style="margin-top:12px" onclick="prevView.innerHTML=''">✖ Close</button></div>`;
   prevView.scrollIntoView({behavior:'smooth'});
 }
-async function addLoan(){
+function addLoan(){
   if(customers.length<3)return alert('❌ Guarantors 2k oni nisa customers 3k wath (naya ganna kena + guarantors 2) system eke inna one!');
   const v=getLoanInputs();if(!v)return;
   const gu=getGuarantors();if(!gu)return;
   const sched=buildSchedule(v.P,v.rate,v.n,lType.value,lMethod.value,lStream.value,lStart.value,v.months,v.weekDay);
   const totalPayable=sched.reduce((s,r)=>s+r.total,0);
   const newId=uid();
-  const newLoan = {id:newId,no:'LN'+String(loans.length+1).padStart(4,'0'),customerId:lCust.value,productId:isManual()?'manual':lProd.value,amount:v.P,rate:v.rate,n:v.n,months:v.months,
+  loans.push({id:newId,no:'LN'+String(loans.length+1).padStart(4,'0'),customerId:lCust.value,productId:isManual()?'manual':lProd.value,amount:v.P,rate:v.rate,n:v.n,months:v.months,
     type:lType.value,weekDay:v.weekDay,method:lMethod.value,stream:lMethod.value==='flat'?lStream.value:'-',start:lStart.value,
     docCharge:v.P*v.docPct/100,otherCharge:v.other,guarantors:gu,
-    schedule:sched,totalPayable,paid:0,status:'pending',createdBy:cur.name};
-  try {
-    await appDataRef.child('loans').child(newId).set(newLoan);
-    await loadAllAppDataFromFirebase(); // Reload data after update
-    if(confirm('✅ Loan created!\n\nPrint LOAN DETAIL REPORT? (PDF)'))printLoanReport(newId);
-    if(confirm('📱 Send loan report via WhatsApp?'))waLoanReport(newId);
-    nav('loans',navBtn('Loans'));
-  } catch (error) {
-    console.error("Error adding loan to Firebase:", error);
-    alert("Failed to add loan: " + error.message);
-  }
+    schedule:sched,totalPayable,paid:0,status:'pending',createdBy:cur.name});
+  save();
+  if(confirm('✅ Loan created!\n\nPrint LOAN DETAIL REPORT? (PDF)'))printLoanReport(newId);
+  if(confirm('📱 Send loan report via WhatsApp?'))waLoanReport(newId);
+  nav('loans',navBtn('Loans'));
 }
 function loanTable(list,tid){
   const M={flat:'Flat',rb_rental:'RB-Rental',rb_capital:'RB-Capital'};
@@ -941,42 +741,20 @@ function loanTable(list,tid){
    <button class="btn sm gray" onclick="viewSched('${l.id}')">📋</button>
    ${isAdmin()?`<button class="btn red sm" onclick="delLoan('${l.id}')">🗑️</button>`:''}</td></tr>`}).join('')||'<tr><td colspan=11>No loans</td></tr>'}</table>`;
 }
-async function delLoan(id){
+function delLoan(id){
   if(!isAdmin())return alert('❌ Only Admin can delete');
   const l=loans.find(x=>x.id===id);if(!l)return;
   const pc=payments.filter(p=>p.loanId===id).length;
   if(!confirm('Delete loan '+l.no+'?'+(pc?'\n⚠️ Also deletes '+pc+' receipt(s)!':'')))return;
   if(!adminPassOK())return;
-  
-  try {
-    // Delete related payments first
-    const paymentsToDelete = payments.filter(p => p.loanId === id);
-    for (const p of paymentsToDelete) {
-        await appDataRef.child('payments').child(p.id).remove();
-    }
-    // Then delete the loan
-    await appDataRef.child('loans').child(id).remove();
-    await loadAllAppDataFromFirebase(); // Reload data after deletions
-    alert('🗑️ Deleted.');
-    nav('loans',navBtn('Loans'));
-  } catch (error) {
-    console.error("Error deleting loan and payments from Firebase:", error);
-    alert("Failed to delete loan: " + error.message);
-  }
+  payments=payments.filter(p=>p.loanId!==id);
+  loans=loans.filter(x=>x.id!==id);
+  save();alert('🗑️ Deleted.');nav('loans',navBtn('Loans'));
 }
-async function approveLoan(id){
+function approveLoan(id){
   const l=loans.find(x=>x.id===id);
   if((cur.limit||0)<l.amount)return alert(`❌ Your approval limit is ${fmt(cur.limit||0)}. This loan (${fmt(l.amount)}) exceeds it.`);
-  
-  try {
-    await appDataRef.child('loans').child(l.id).update({status:'active', approvedBy:cur.name});
-    await loadAllAppDataFromFirebase(); // Reload data after update
-    alert('✅ Approved by '+cur.name);
-    nav('loans',navBtn('Loans'));
-  } catch (error) {
-    console.error("Error approving loan in Firebase:", error);
-    alert("Failed to approve loan: " + error.message);
-  }
+  l.status='active';l.approvedBy=cur.name;save();alert('✅ Approved by '+cur.name);nav('loans',navBtn('Loans'));
 }
 function viewSched(id){
   const l=loans.find(x=>x.id===id);const c=customers.find(x=>x.id===l.customerId);
@@ -1119,53 +897,25 @@ function payPick(){
   payInfo.innerHTML=nd?`Next due <b>${nd.date}</b> — amount <b>${fmt(nd.amount)}</b>`:'';
   if(payAmt)payAmt.value=ar>0?ar.toFixed(2):(nd?nd.amount.toFixed(2):'');
 }
-async function addPayment(){
+function addPayment(){
   const l=loans.find(x=>x.id===payLoan.value);const amt=+payAmt.value;
   if(!l||!amt||amt<=0)return alert('Select loan & enter amount');
   if(amt>l.totalPayable-l.paid+0.01)return alert('Amount exceeds balance ('+fmt(l.totalPayable-l.paid)+')');
-  
-  const updatedPaid = l.paid + amt;
-  const newStatus = updatedPaid >= l.totalPayable - 0.01 ? 'settled' : 'active';
-  
-  const newId = uid();
-  const rec={id:newId,receiptNo:'RCP'+String(payments.length+1).padStart(5,'0'),loanId:l.id,amount:amt,date:today(),
+  l.paid+=amt;if(l.paid>=l.totalPayable-0.01)l.status='settled';
+  const rec={id:uid(),receiptNo:'RCP'+String(payments.length+1).padStart(5,'0'),loanId:l.id,amount:amt,date:today(),
     method:payMethod.value,remark:payRemark.value,by:cur.name};
-
-  try {
-    // Update loan details
-    await appDataRef.child('loans').child(l.id).update({paid: updatedPaid, status: newStatus});
-    // Add new payment
-    await appDataRef.child('payments').child(newId).set(rec);
-    await loadAllAppDataFromFirebase(); // Reload data after update/add
-    printReceipt(rec.id);
-    nav('payments',navBtn('Payments'));
-  } catch (error) {
-    console.error("Error saving payment to Firebase:", error);
-    alert("Failed to save payment: " + error.message);
-  }
+  payments.push(rec);save();printReceipt(rec.id);nav('payments',navBtn('Payments'));
 }
-async function delPaymentRow(id){
+function delPaymentRow(id){
   if(!isAdmin())return alert('❌ Only Admin can delete');
   const p=payments.find(x=>x.id===id);if(!p)return;
   const l=loans.find(x=>x.id===p.loanId);
   const c=l&&customers.find(x=>x.id===l.customerId);
   if(!confirm('Delete receipt '+p.receiptNo+'?\nCustomer: '+(c?c.full:'')+'\nAmount: '+fmt(p.amount)+'\n\nLoan balance will be adjusted back.'))return;
   if(!adminPassOK())return;
-  
-  try {
-    if(l){
-        const updatedPaid = Math.max(0, l.paid - p.amount);
-        const newStatus = l.status === 'settled' && updatedPaid < l.totalPayable - 0.01 ? 'active' : l.status;
-        await appDataRef.child('loans').child(l.id).update({paid: updatedPaid, status: newStatus});
-    }
-    await appDataRef.child('payments').child(id).remove();
-    await loadAllAppDataFromFirebase(); // Reload data after deletions
-    alert('🗑️ Deleted & balance adjusted.');
-    nav('payments',navBtn('Payments'));
-  } catch (error) {
-    console.error("Error deleting payment from Firebase:", error);
-    alert("Failed to delete payment: " + error.message);
-  }
+  if(l){l.paid=Math.max(0,l.paid-p.amount);if(l.status==='settled'&&l.paid<l.totalPayable-0.01)l.status='active'}
+  payments=payments.filter(x=>x.id!==id);
+  save();alert('🗑️ Deleted & balance adjusted.');nav('payments',navBtn('Payments'));
 }
 function printReceipt(pid){
   const p=payments.find(x=>x.id===pid);const l=loans.find(x=>x.id===p.loanId);const c=customers.find(x=>x.id===l.customerId);
@@ -1188,7 +938,7 @@ function printReceipt(pid){
     <tr><td>Outstanding Balance:</td><td style="text-align:right">${fmt(l.totalPayable-l.paid)}</td></tr>
     ${ar>0?`<tr><td style="color:#dc2626"><b>⚠️ ARREARS:</b></td><td style="text-align:right"><b style="color:#dc2626">${fmt(ar)}</b></td></tr>`:''}
     ${nd?`<tr><td><b>Next Payment Date:</b></td><td style="text-align:right"><b style="color:#dc2626">${nd.date}</b></td></tr>
-    <tr><td>Next Installment:</b></td><td style="text-align:right">${fmt(nd.amount)}</td></tr>`:`<tr><td colspan=2 style="text-align:center;color:#16a34a;padding-top:8px"><b>🎉 LOAN FULLY SETTLED</b></td></tr>`}
+    <tr><td>Next Installment:</td><td style="text-align:right">${fmt(nd.amount)}</td></tr>`:`<tr><td colspan=2 style="text-align:center;color:#16a34a;padding-top:8px"><b>🎉 LOAN FULLY SETTLED</b></td></tr>`}
     </table>
     <div style="text-align:center;font-size:11px;color:#777;margin-top:14px;border-top:1px dashed #999;padding-top:8px">Collected by: ${esc(p.by)} • Thank you!</div>
   </div>`;
@@ -1410,38 +1160,21 @@ function runOfficer(){
 /* ============ USERS (Firebase integrated) ============ */
 function pgUsers(){
   const admin=isAdmin();
-  const pendingUsers = users.filter(u => u.status === 'pending');
-  // For approvedUsers, include those with 'approved' status or no status (implying legacy approved)
-  const approvedUsers = users.filter(u => u.status === 'approved' || !u.status);
-
-  let html = '';
-
-  if (admin && pendingUsers.length > 0) {
-    html += `<div class="card"><div class="secrow"><h3>Pending User Approvals (${pendingUsers.length})</h3></div>
-    <table id="tblPendingUsers"><tr><th>Name</th><th>Username (Email)</th><th>Actions</th></tr>
-    ${pendingUsers.map(u=>`<tr><td><b>${esc(u.name)}</b></td><td>${esc(u.username)}</td>
-    <td><button class="btn green sm" onclick="approveUser('${u.id}')">✅ Approve</button>
-    <button class="btn red sm" onclick="rejectUser('${u.id}')">❌ Reject</button></td></tr>`).join('')}</table></div>`;
-  }
-
-  html += `<div class="card"><div class="secrow"><h3>System Users</h3>${xlsBtn('tblUsers','users')}</div>
-  <table id="tblUsers"><tr><th>Name</th><th>Username (Email)</th><th>Role</th><th>Approval Limit</th><th>Status</th><th></th></tr>
-  ${approvedUsers.map(u=>`<tr><td><b>${esc(u.name)}</b></td><td>${esc(u.username)}</td>
+  return `<div class="card"><div class="secrow"><h3>System Users</h3>${xlsBtn('tblUsers','users')}</div>
+  <table id="tblUsers"><tr><th>Name</th><th>Username (Email)</th><th>Role</th><th>Approval Limit</th><th></th></tr>
+  ${users.map(u=>`<tr><td><b>${esc(u.name)}</b></td><td>${esc(u.username)}</td>
   <td>${admin?`<select onchange="setRole('${u.id}',this.value)" style="margin:0"><option ${u.role==='Admin'?'selected':''}>Admin</option><option ${u.role==='Manager'?'selected':''}>Manager</option><option ${u.role==='Officer'?'selected':''}>Officer</option></select>`:u.role}</td>
   <td>${admin?`<input type="number" value="${u.limit||0}" style="width:140px;margin:0" onchange="setLimit('${u.id}',this.value)">`:fmt(u.limit||0)}</td>
-  <td><span class="badge b-${u.status === 'approved' || !u.status ? 'settled' : (u.status === 'pending' ? 'pending' : 'bad')}">${u.status ? u.status.toUpperCase() : 'APPROVED'}</span></td>
   <td>${admin&&cur&&u.id!==cur.uid?`<button class="btn red sm" onclick="delUser('${u.id}')">🗑️</button>`:''}</td></tr>`).join('')}</table></div>`;
-  
-  return html;
 }
 
 async function setRole(id, v){
   if(!isAdmin())return;
   if(!adminPassOK()) return; // Admin password confirmation
   try {
-    await usersDbRef.child(id).update({ role: v });
+    await firebase.database().ref('users/' + id).update({ role: v });
     if (v === 'Admin') { // If setting to Admin, also set high limit
-        await usersDbRef.child(id).update({ limit: 999999999 });
+        await firebase.database().ref('users/' + id).update({ limit: 999999999 });
     }
     await syncUsersFromFirebase(); // Refresh local users array
     alert('User role updated!');
@@ -1455,7 +1188,7 @@ async function setLimit(id, v){
   if(!isAdmin())return;
   if(!adminPassOK()) return; // Admin password confirmation
   try {
-    await usersDbRef.child(id).update({ limit: +v });
+    await firebase.database().ref('users/' + id).update({ limit: +v });
     await syncUsersFromFirebase(); // Refresh local users array
     alert('User limit updated!');
     nav('users', navBtn('Users')); // Refresh UI
@@ -1463,39 +1196,6 @@ async function setLimit(id, v){
     alert('Error updating limit: ' + error.message);
   }
 }
-
-async function approveUser(id) {
-  if (!isAdmin()) return alert('❌ Only Admin can approve users.');
-  if (!adminPassOK()) return;
-
-  try {
-    await usersDbRef.child(id).update({ status: 'approved' });
-    await syncUsersFromFirebase();
-    alert('✅ User approved!');
-    nav('users', navBtn('Users')); // Refresh UI
-  } catch (error) {
-    alert('Error approving user: ' + error.message);
-  }
-}
-
-async function rejectUser(id) {
-  if (!isAdmin()) return alert('❌ Only Admin can reject users.');
-  if (!confirm('Are you sure you want to reject and delete this user? This cannot be undone.')) return;
-  if (!adminPassOK()) return;
-
-  try {
-    // Delete user's profile from Realtime DB
-    await usersDbRef.child(id).remove();
-    // Note: To completely delete from Firebase Auth, Admin SDK is needed (server-side).
-    // Client-side can only delete current user's Auth account, not others.
-    await syncUsersFromFirebase();
-    alert('❌ User rejected and profile deleted.');
-    nav('users', navBtn('Users')); // Refresh UI
-  } catch (error) {
-    alert('Error rejecting user: ' + error.message);
-  }
-}
-
 
 async function delUser(id){
   if(!isAdmin())return alert('❌ Only Admin can delete users');
@@ -1505,7 +1205,7 @@ async function delUser(id){
   try {
     // We can only delete the user's profile from Realtime DB client-side.
     // Deleting the Firebase Auth user account requires server-side Admin SDK or re-authentication of the target user.
-    await usersDbRef.child(id).remove();
+    await firebase.database().ref('users/' + id).remove();
     await syncUsersFromFirebase(); // Refresh local users array
     alert('🗑️ User profile deleted from database.');
     nav('users', navBtn('Users'));
@@ -1517,9 +1217,9 @@ async function delUser(id){
 /* ============ SETTINGS + DANGER ZONE ============ */
 function pgSettings(){
   let html=`<div class="card"><h3 class="sec">Company Settings</h3><div class="grid g2">
-    <div><label>Company Name</label><input id="setCo" value="${esc(settings.company || '')}">
-    <label>Address</label><input id="setAddr" value="${esc(settings.address || '')}">
-    <label>Phone</label><input id="setPh" value="${esc(settings.phone || '')}">
+    <div><label>Company Name</label><input id="setCo" value="${esc(settings.company)}">
+    <label>Address</label><input id="setAddr" value="${esc(settings.address)}">
+    <label>Phone</label><input id="setPh" value="${esc(settings.phone)}">
     <label>Company Logo</label><input id="setLogo" type="file" accept="image/*">
     <button class="btn green" onclick="saveSettings()">💾 Save Settings</button></div>
     <div style="text-align:center">${settings.logo?`<img src="${settings.logo}" style="max-height:120px;border:1px solid #ddd;border-radius:8px;padding:8px">`:'<p style="color:#94a3b8">No logo</p>'}</div>
@@ -1538,124 +1238,70 @@ function pgSettings(){
   }
   return html;
 }
-async function saveSettings(){
-  const updatedSettings = {
-    company: setCo.value,
-    address: setAddr.value,
-    phone: setPh.value,
-    logo: settings.logo || '' // Keep existing logo if no new file selected
-  };
-
+function saveSettings(){
+  settings.company=setCo.value;settings.address=setAddr.value;settings.phone=setPh.value;
   const f=setLogo.files[0];
-  if(f){
-    const r=new FileReader();
-    r.onload=async e=>{
-      updatedSettings.logo=e.target.result;
-      try {
-        await appDataRef.child('settings').set(updatedSettings);
-        await loadAllAppDataFromFirebase(); // Reload data after update
-        applyBrand(); // Apply brand AFTER settings are loaded from Firebase
-        alert('Saved!');
-        nav('settings',navBtn('Settings'));
-      } catch (error) {
-        console.error("Error saving settings with logo to Firebase:", error);
-        alert("Failed to save settings: " + error.message);
-      }
-    };
-    r.readAsDataURL(f);
-  } else {
-    try {
-      await appDataRef.child('settings').set(updatedSettings);
-      await loadAllAppDataFromFirebase(); // Reload data after update
-      applyBrand(); // Apply brand AFTER settings are loaded from Firebase
-      alert('Saved!');
-      nav('settings',navBtn('Settings'));
-    } catch (error) {
-      console.error("Error saving settings to Firebase:", error);
-      alert("Failed to save settings: " + error.message);
-    }
-  }
+  if(f){const r=new FileReader();r.onload=e=>{settings.logo=e.target.result;save();applyBrand();alert('Saved!');nav('settings',navBtn('Settings'))};r.readAsDataURL(f)}
+  else{save();applyBrand();alert('Saved!');nav('settings',navBtn('Settings'))}
 }
-
-async function backup(){
-  try {
-    const appDataSnapshot = await appDataRef.once('value');
-    const usersSnapshot = await usersDbRef.once('value');
-
-    const backupData = {
-      appData: appDataSnapshot.val(),
-      users: usersSnapshot.val()
-    };
-
-    const blob=new Blob([JSON.stringify(backupData)],{type:'application/json'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='loan-backup-'+today()+'.json';a.click();
-    alert('✅ All application data and user profiles downloaded!');
-  } catch (error) {
-    console.error("Error creating backup:", error);
-    alert("Failed to create backup: " + error.message);
-  }
+function backup(){
+  const blob=new Blob([JSON.stringify({users,groups,customers,products,loans,payments,settings})],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='loan-backup-'+today()+'.json';a.click();
 }
-
 function restore(inp){
   const f=inp.files[0];if(!f)return;const r=new FileReader();
-  r.onload=async e=>{
-    try{
-      const d=JSON.parse(e.target.result);
-      if (d.appData) {
-          await appDataRef.set(d.appData); // Overwrite app data
-          alert('✅ Application data (groups, customers, loans, etc.) restored!');
-      } else {
-          alert('❌ No application data found in backup file to restore.');
-      }
-      
-      // For users, it's generally NOT safe to overwrite client-side
-      if (d.users) {
-          alert('⚠️ User profiles found in backup. Restoring user profiles via client-side is not recommended for security and integrity. Please manage users directly in Firebase Console or use Admin SDK.');
-      }
-
-      await loadAllAppDataFromFirebase(); // Reload local data from Firebase
-      await syncUsersFromFirebase(); // Reload user data
-      location.reload();
-
-    }catch(error){
-      console.error("Error restoring backup:", error);
-      alert('Invalid backup file or failed to restore: ' + error.message);
-    }
-  };
+  r.onload=e=>{try{const d=JSON.parse(e.target.result);
+  // Restore local storage items
+  groups=d.groups||[];customers=d.customers||[];
+  products=d.products||[];loans=d.loans||[];payments=d.payments||[];settings=d.settings||settings;
+  save(); // Save local storage items
+  // Handle users separately (if restoring users should overwrite Firebase, this is complex client-side)
+  // For this context, assuming users are managed by Firebase and not restored from local backup
+  alert('Local data (groups, customers, loans, payments, settings) restored! Users are managed by Firebase.');
+  location.reload()}catch{alert('Invalid backup file')}};
   r.readAsText(f);
 }
 function gQuick(){backup();window.open('https://drive.google.com/drive/my-drive','_blank');
   alert('✅ Backup downloaded! Google Drive opened - drag & drop the file into it.')}
-async function delPaymentByReceipt(){
+function delPaymentByReceipt(){
   if(!isAdmin())return alert('❌ Only Admin');
   const rn=prompt('Enter Receipt No (e.g. RCP00005):');if(!rn)return;
   const p=payments.find(x=>(x.receiptNo||'').toUpperCase()===rn.trim().toUpperCase());
   if(!p)return alert('❌ Receipt not found');
   delPaymentRow(p.id);
 }
-async function fullClear(){
+function fullClear(){
   if(!isAdmin())return alert('❌ Only Admin');
   if(!confirm('⚠️ CONFIRM 1 of 3\n\nDELETE EVERYTHING: Customers, Loans, Payments, Products, Groups, Users, Settings.\n\nContinue?'))return;
   if(!confirm('⚠️ CONFIRM 2 of 3\n\nALL DATA LOST FOREVER. Backup ekak gaththada?\n\nContinue?'))return;
   if(!confirm('🔴 FINAL CONFIRM 3 of 3\n\n100% SURE? CANNOT be undone!'))return;
   if(!adminPassOK())return;
   
-  try {
-    // Clear all application data
-    await appDataRef.remove();
-    // Clear all user profiles (from Realtime DB, Auth users remain unless deleted via console/Admin SDK)
-    await usersDbRef.remove();
-
-    // Sign out current user
-    await firebase.auth().signOut();
-    
-    alert('🗑️ ALL DATA CLEARED (Firebase appData & user profiles). You are now logged out.');
+  // Clear local storage items
+  Object.keys(localStorage).filter(k=>k.startsWith('lms_')).forEach(k=>localStorage.removeItem(k));
+  
+  // Attempt to clear Firebase Realtime Database 'users' node (requires write access)
+  firebase.database().ref('users').remove().then(() => {
+    // Optionally sign out all users from Firebase Auth
+    firebase.auth().signOut().then(() => {
+      alert('🗑️ ALL DATA CLEARED (Local Storage & Firebase Users).');
+      location.reload();
+    }).catch(e => {
+      console.error("Error signing out:", e);
+      alert('🗑️ ALL DATA CLEARED (Local Storage & Firebase Users), but could not sign out from Firebase Auth.');
+      location.reload();
+    });
+  }).catch(e => {
+    console.error("Error clearing Firebase users:", e);
+    alert('🗑️ ALL LOCAL DATA CLEARED, but failed to clear Firebase Users: ' + e.message);
     location.reload();
-  } catch (error) {
-    console.error("Error during full clear:", error);
-    alert('❌ Failed to clear all data: ' + error.message);
-  }
+  });
 }
+
+/* ============ INIT ============ */
+// Initial setup for existing customer data (no change needed for this part)
+(function(){let ch=false;customers.forEach((c,i)=>{if(!c.no){c.no='CUS'+String(i+1).padStart(4,'0');ch=true}if(!c.joined){c.joined=today();ch=true}});if(ch)save()})();
+
 
 /* ===== CUSTOMER EDIT OPTION ===== */
 let editCid=null;
@@ -1703,34 +1349,25 @@ function nicCheck(){
   nicWarn.textContent=dup?'⚠️ NIC already registered to: '+dup.full+' ('+dup.no+')':'';
 }
 
-// Initial call to applyBrand() when the script loads, before Firebase has fully initialized.
-// This ensures default branding is shown immediately.
-document.addEventListener('DOMContentLoaded', () => {
-    // This initial call will use the hardcoded default settings, or whatever is fetched quickly.
-    // The onAuthStateChanged listener will then fetch and apply the saved settings from Firebase.
-    applyBrand(); 
-
-    // Add event listener for 'Enter' key on username and password fields
-    const liUser = document.getElementById('liUser');
-    const liPass = document.getElementById('liPass');
-    
-    // Function to handle Enter key login
-    const handleLoginEnter = (event) => {
-        if (event.key === 'Enter' || event.keyCode === 13) {
-            event.preventDefault(); // Prevent default form submission behavior
-            console.log('Enter key pressed, attempting login.');
-            login();
-        }
-    };
-
-    if (liUser) {
-        liUser.addEventListener('keydown', handleLoginEnter);
-    }
-
-    if (liPass) {
-        liPass.addEventListener('keydown', handleLoginEnter);
-    }
-});
+/* Save - create OR update */
+function addCustomer(){
+  if(!cFull.value.trim()||!cNic.value.trim()||!cPhone.value.trim())return alert('Full name, NIC & Phone are required');
+  const dup=customers.find(c=>normNic(c.nic)===normNic(cNic.value)&&c.id!==editCid);
+  if(dup)return alert('❌ DUPLICATE NIC! Already registered to: '+dup.full+' ('+dup.no+')');
+  if(editCid){
+    /* UPDATE existing customer - Cust No, Join Date, Documents ehemama thiyenawa */
+    const c=customers.find(x=>x.id===editCid);if(!c)return;
+    c.group=cGroup.value;c.title=cTitle.value;c.full=cFull.value.trim();c.other=cOther.value;
+    c.nic=normNic(cNic.value);c.phone=cPhone.value.trim();c.email=cEmail.value;c.map=cMap.value;
+    c.addr=cAddr.value;c.dob=cDob.value;c.gender=cGender.value;c.marital=cMar.value;
+    editCid=null;
+    save();alert('✅ Customer updated!');nav('customers',navBtn('Customers'));
+    return;
+  }
+  customers.push({id:uid(),no:nextCustNo(),joined:today(),group:cGroup.value,title:cTitle.value,full:cFull.value.trim(),other:cOther.value,nic:normNic(cNic.value),
+    phone:cPhone.value.trim(),email:cEmail.value,map:cMap.value,addr:cAddr.value,dob:cDob.value,gender:cGender.value,marital:cMar.value});
+  save();nav('customers',navBtn('Customers'));
+}
 </script>
 </body>
 </html>
