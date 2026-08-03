@@ -314,6 +314,15 @@ async function bootApp(){
   await loadAllAppDataFromFirebase(); // Ensure settings are loaded
   applyBrand(); // Apply the freshly loaded settings to the UI
   console.log("App booted with settings:", settings);
+
+  // 🔔 Admin ට අලුත් Pending User කෙනෙක් ආව ගමන් Screen එකේ Alert එකක් ඒමට:
+  if (cur.role === 'Admin') {
+    usersDbRef.orderByChild('status').equalTo('pending').on('child_added', (snapshot) => {
+      const newUser = snapshot.val();
+      alert(`🔔 New User Pending Approval:\nName: ${newUser.name}\nEmail: ${newUser.username}`);
+    });
+  }
+
   nav('dashboard',document.querySelector('aside button'));
 }
 
