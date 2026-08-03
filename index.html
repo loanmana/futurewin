@@ -214,7 +214,8 @@ async function signup(){
 
     const role = firstUser ? 'Admin' : 'Officer';
     const limit = firstUser ? 999999999 : 0;
-    const status = 'approved';
+    const status = firstUser ? 'approved' : 'pending'; // New: status is 'pending' for non-first users
+
     // Store additional user details in Firebase Realtime Database
     await usersDbRef.child(user.uid).set({
       name: n,
@@ -225,7 +226,7 @@ async function signup(){
     });
     
     await syncUsersFromFirebase(); // Refresh local users array
-    alert('Account created successfully! Please login.');
+    alert(firstUser ? 'Admin account created! Please login.' : 'Account created. Please wait for Admin approval.'); // Update alert message
     toggleAuth(0); // Switch back to login form
   } catch (error) {
     alert('Signup Error: ' + error.message);
@@ -313,15 +314,6 @@ async function bootApp(){
   await loadAllAppDataFromFirebase(); // Ensure settings are loaded
   applyBrand(); // Apply the freshly loaded settings to the UI
   console.log("App booted with settings:", settings);
-
-  // 🔔 Admin ට අලුත් Pending User කෙනෙක් ආව ගමන් Screen එකේ Alert එකක් ඒමට:
-  if (cur.role === 'Admin') {
-    usersDbRef.orderByChild('status').equalTo('pending').on('child_added', (snapshot) => {
-      const newUser = snapshot.val();
-      alert(`🔔 New User Pending Approval:\nName: ${newUser.name}\nEmail: ${newUser.username}`);
-    });
-  }
-
   nav('dashboard',document.querySelector('aside button'));
 }
 
@@ -414,13 +406,32 @@ function dashboard(){
   const out=act.reduce((s,l)=>s+(l.totalPayable-l.paid),0);
   const col=payments.filter(p=>p.date===today()).reduce((s,p)=>s+p.amount,0);
   const totArr=act.reduce((s,l)=>s+arrearsOf(l),0);
-  return `<div class="grid g4">
-    <div class="stat"><div class="v">${customers.length}</div><div class="l">Customers</div></div>
-    <div class="stat"><div class="v">${fmt(out)}</div><div class="l">Total Outstanding (${act.length} loans)</div></div>
-    <div class="stat red"><div class="v">${fmt(totArr)}</div><div class="l">⚠️ Total Arrears</div></div>
-    <div class="stat green"><div class="v">${fmt(col)}</div><div class="l">Today's Collection</div></div>
-  </div>
-  <div class="card" style="margin-top:18px"><h3 class="sec">Pending Loan Approvals</h3>${loanTable(loans.filter(l=>l.status==='pending'),'tblPend')}</div>`;
+
+  // --- MODIFIED CODE START for Admin Notification ---
+  let adminNotification = '';
+  if (isAdmin()) {
+    const pendingUsersCount = users.filter(u => u.status === 'pending').length;
+    if (pendingUsersCount > 0) {
+      adminNotification = `
+        <div class="card" style="background:#fff7ed;border:2px solid #d97706;margin-bottom:18px;">
+          <h3 style="color:#92400e;margin-bottom:8px;">🔔 Admin Notification</h3>
+          <p>There are <b>${pendingUsersCount}</b> new user account(s) pending your approval.
+          <button class="btn orange sm" style="margin-left:10px;" onclick="nav('users', navBtn('Users'))">Review Users</button></p>
+        </div>
+      `;
+    }
+  }
+  // --- MODIFIED CODE END ---
+
+  return `
+    ${adminNotification}
+    <div class="grid g4">
+      <div class="stat"><div class="v">${customers.length}</div><div class="l">Customers</div></div>
+      <div class="stat"><div class="v">${fmt(out)}</div><div class="l">Total Outstanding (${act.length} loans)</div></div>
+      <div class="stat red"><div class="v">${fmt(totArr)}</div><div class="l">⚠️ Total Arrears</div></div>
+      <div class="stat green"><div class="v">${fmt(col)}</div><div class="l">Today's Collection</div></div>
+    </div>
+    <div class="card" style="margin-top:18px"><h3 class="sec">Pending Loan Approvals</h3>${loanTable(loans.filter(l=>l.status==='pending'),'tblPend')}</div>`;
 }
 function arrearsOf(l){
   let cumDue=0;const t=today();
@@ -462,9 +473,9 @@ function cifAllReport(){
   cifAllOut.innerHTML=`<div style="text-align:right;margin:8px 0">${xlsBtn('tblCifAll','all-customers')}</div>
   <table id="tblCifAll"><tr><th>Cust No</th><th>Join Date</th><th>Name</th><th>NIC</th><th>Phone</th><th>Group</th><th>Address</th><th>Active Loans</th><th>Outstanding</th></tr>
   ${list.map(c=>{const g=groups.find(x=>x.id===c.group);
-    const cl=loans.filter(l=>l.customerId===c.id&&l.status==='active');
+    const cl=loans.filter(l=>l.customerId===c.id&&l.status!=='settled');
     const out=cl.reduce((s,l)=>s+(l.totalPayable-l.paid),0);
-  return `<tr><td><b>${esc(c.no)}</b></td><td>${esc(c.joined)}</td><td>${esc(c.title)}. ${esc(c.full)}</td><td>${esc(c.nic)}</td><td>${esc(c.phone)}</td>
+  return `<tr><td><b>${esc(c.no)}</b></td><td>${esc(c.joined)}</td><td>${esc(c.title)}. ${esc(c.full)}</b></td><td>${esc(c.nic)}</td><td>${esc(c.phone)}</td>
   <td>${g?esc(g.name):'-'}</td><td>${esc(c.addr||'')}</td><td>${cl.length}</td><td>${fmt(out)}</td></tr>`}).join('')||'<tr><td colspan=9>No customers</td></tr>'}
   <tr><td colspan=8 style="text-align:right"><b>TOTAL CUSTOMERS: ${list.length}</b></td><td></td></tr></table>`;
 }
@@ -900,7 +911,7 @@ function previewLoan(){
     <div class="row"><span>TOTAL PAYABLE</span><b class="big">${fmt(totalPayable)}</b></div>
     <div class="row"><span>Repayment: ${v.n} × ${lType.value}${dayTxt}</span><b class="big" style="color:var(--ok)">${fmt(inst)}</b></div>
     <div class="row"><span>Document Charge (${v.docPct}%)</span><b>${fmt(v.P*v.docPct/100)}</b></div>
-    <div class="row"><span>Other Charges</span><b>${fmt(v.other)}</b></div>
+    <div class="row"><span>Other Charges (Rs.)</span><b>${fmt(v.other)}</b></div>
     <div class="row"><span>First Due</span><b>${sched[0]?sched[0].date:'-'}</b></div>
     <div class="row"><span>Last Due</span><b>${sched[sched.length-1]?sched[sched.length-1].date:'-'}</b></div>
   </div>
@@ -1256,7 +1267,7 @@ function pgLedger(){
     <div class="grid g3">
     <div><label>🔎 Search (NIC / Name / Cust No)</label><input id="ldQ" oninput="ldFilter()"></div>
     <div><label>Select Loan</label><select id="ldLoan" onchange="showLedger()">${ledgerOptions('')}</select></div>
-    <div style="align-self:end"><button class="btn" onclick="showLedger()">View Ledger</button></div>
+    <div style="align-align-self:end"><button class="btn" onclick="showLedger()">View Ledger</button></div>
     </div><div id="ldOut"></div></div>`;
   setTimeout(showLedger,60);
   return html;
