@@ -214,8 +214,7 @@ async function signup(){
 
     const role = firstUser ? 'Admin' : 'Officer';
     const limit = firstUser ? 999999999 : 0;
-    const status = firstUser ? 'approved' : 'pending'; // New: status is 'pending' for non-first users
-
+    const status = 'approved';
     // Store additional user details in Firebase Realtime Database
     await usersDbRef.child(user.uid).set({
       name: n,
@@ -226,7 +225,7 @@ async function signup(){
     });
     
     await syncUsersFromFirebase(); // Refresh local users array
-    alert(firstUser ? 'Admin account created! Please login.' : 'Account created. Please wait for Admin approval.'); // Update alert message
+    alert('Account created successfully! Please login.');
     toggleAuth(0); // Switch back to login form
   } catch (error) {
     alert('Signup Error: ' + error.message);
